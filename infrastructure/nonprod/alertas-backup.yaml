@@ -1,0 +1,80 @@
+# Alertas de salud de respaldo.
+#
+# ⚠️ TRAMPA IMPORTANTE: con el Barman Cloud Plugin, las metricas nativas de
+# CloudNativePG (cnpg_collector_last_available_backup_timestamp y compania)
+# quedan en CERO PERMANENTEMENTE — estan deprecadas desde 1.26 y solo funcionan
+# con el mecanismo in-tree. Un dashboard copiado de internet basado en ellas
+# reportaria "sin backups" para siempre, que es peor que no tener alerta.
+# Las metricas validas llevan el prefijo barman_cloud_cloudnative_pg_io_ y las
+# expone el mismo exportador que ya recogen nuestros PodMonitor.
+#
+# Igual advertencia para .status.firstRecoverabilityPoint del Cluster: no se
+# rellena con plugins. La fuente de verdad es .status.serverRecoveryWindow del
+# ObjectStore.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: erp-backups-nonprod
+  namespace: monitoring
+  labels:
+    release: monitoring        # debe coincidir con el ruleSelector de Prometheus
+spec:
+  groups:
+    - name: erp.backup.postgres
+      rules:
+        - alert: BackupNoCompletado
+          expr: |
+            time() - max by (namespace) (
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=~"erp-(dev|qa)"}
+            ) > 26 * 3600
+          for: 15m
+          labels: { severity: warning, componente: backup }
+          annotations:
+            summary: "Sin backup completo de {{ $labels.namespace }} en mas de 26 h"
+            description: "Ultimo backup disponible hace {{ $value | humanizeDuration }}."
+
+        - alert: BackupNuncaEjecutado
+          expr: |
+            max by (namespace) (
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=~"erp-(dev|qa)"}
+            ) == 0
+          for: 1h
+          labels: { severity: warning, componente: backup }
+          annotations:
+            summary: "{{ $labels.namespace }} nunca completo un backup"
+            description: "Revisar ObjectStore, Secret s3-backup-creds y politica IAM del bucket."
+
+        - alert: UltimoBackupFallido
+          expr: |
+            max by (namespace) (barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{namespace=~"erp-(dev|qa)"})
+            > max by (namespace) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=~"erp-(dev|qa)"})
+          for: 10m
+          labels: { severity: warning, componente: backup }
+          annotations:
+            summary: "El ultimo intento de backup de {{ $labels.namespace }} fallo"
+            description: "Revisar los logs del sidecar plugin-barman-cloud."
+
+    - name: erp.postgres.salud
+      rules:
+        # El archivado de WAL detenido es MAS grave que un backup fallido: sin el
+        # no hay recuperacion a un punto en el tiempo, y pg_wal empieza a llenar
+        # el disco hasta tumbar la base.
+        - alert: ArchivadoWALDetenido
+          expr: |
+            cnpg_pg_stat_archiver_failed_count{namespace=~"erp-.*"} -
+            cnpg_pg_stat_archiver_failed_count{namespace=~"erp-.*"} offset 15m > 0
+          for: 15m
+          labels: { severity: critical, componente: backup }
+          annotations:
+            summary: "Fallos de archivado de WAL en {{ $labels.namespace }}"
+            description: "Sin archivado no hay PITR y pg_wal crece hasta llenar el disco."
+
+        - alert: DiscoPostgresCasiLleno
+          expr: |
+            (kubelet_volume_stats_available_bytes{namespace=~"erp-.*"} /
+             kubelet_volume_stats_capacity_bytes{namespace=~"erp-.*"}) < 0.15
+          for: 10m
+          labels: { severity: critical, componente: almacenamiento }
+          annotations:
+            summary: "Menos del 15% libre en {{ $labels.persistentvolumeclaim }}"
+            description: "PostgreSQL deja de aceptar escrituras si el disco se llena."

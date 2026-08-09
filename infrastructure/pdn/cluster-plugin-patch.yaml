@@ -1,0 +1,34 @@
+# Conecta el cluster erp-db de PRODUCCION al plugin de respaldo.
+#
+# ⚠️ ATENCION - ESTO PROVOCA UN REINICIO DEL POD DE POSTGRESQL.
+# El plugin inyecta un contenedor sidecar en el pod, lo que obliga a recrearlo.
+# Con instances:1 eso es CORTE REAL de la base de datos, no un reinicio sin
+# impacto. Aplicar SOLO en ventana de mantenimiento anunciada.
+# (Cuando existan 2-3 instancias, el mismo cambio sera sin corte.)
+#
+# Aplicar con:
+#   kubectl patch cluster erp-db -n erp-pdn --type=merge \
+#     --patch-file infrastructure/pdn/cluster-plugin-patch.yaml
+#
+# Verificar ANTES que no exista .spec.backup.barmanObjectStore (el mecanismo
+# viejo no puede coexistir con el plugin):
+#   kubectl get cluster erp-db -n erp-pdn -o jsonpath='{.spec.backup}'
+spec:
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io   # literal exacto
+      enabled: true
+      isWALArchiver: true                    # como maximo UN plugin puede serlo
+      parameters:
+        barmanObjectName: erp-pdn-store
+        # CRITICO: los tres clusters se llaman "erp-db". Sin serverName
+        # explicito, el catalogo de DEV pisaria el de PRODUCCION en S3.
+        serverName: erp-db-pdn
+  postgresql:
+    parameters:
+      archive_timeout: "300s"    # RPO <= 5 min. Bajarlo a 60s multiplica x5 los
+                                 # objetos y, peor, la velocidad a la que pg_wal
+                                 # llena el disco si el archivado se cae.
+      wal_compression: "lz4"     # comprime imagenes de pagina DENTRO del WAL
+      max_wal_size: "2GB"
+      min_wal_size: "256MB"
+      wal_keep_size: "1GB"

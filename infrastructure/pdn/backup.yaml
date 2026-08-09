@@ -1,0 +1,74 @@
+# Respaldo continuo de PostgreSQL en PRODUCCION.
+# CloudNativePG 1.30 + Barman Cloud Plugin 0.14 -> AWS S3.
+#
+# Requiere el Secret s3-backup-creds con ACCESS_KEY_ID, ACCESS_SECRET_KEY y
+# AWS_REGION (creado con tools/scripts/crear-secreto-s3.ps1 del repo del ERP).
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: erp-pdn-store
+  namespace: erp-pdn
+  labels: { ambiente: pdn, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  # OJO: retentionPolicy va AQUI, no dentro de configuration (la documentacion
+  # de conceptos lo muestra mal). Patron ^[1-9][0-9]*[dwm]$ donde m = MESES.
+  # 35d = un ciclo contable mensual completo + 5 dias de margen de deteccion.
+  retentionPolicy: "35d"
+  configuration:
+    destinationPath: "s3://ingenia365-erp-backups/erp/pdn"
+    # endpointURL se OMITE para AWS S3 nativo.
+    # Al migrar a MinIO: endpointURL: "https://minio.interno:9000"
+    s3Credentials:
+      accessKeyId:     { name: s3-backup-creds, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: s3-backup-creds, key: ACCESS_SECRET_KEY }
+      # La region es una REFERENCIA A SECRETO, no un texto: el API server
+      # rechaza `region: us-east-1`.
+      region:          { name: s3-backup-creds, key: AWS_REGION }
+    wal:
+      # El plugin NO comprime por defecto. Sin esto, con archive_timeout=300s
+      # se suben 288 segmentos de 16 MiB por dia (~4.6 GB) casi vacios.
+      # Con zstd bajan a decenas de KB: una linea de YAML, factor ~400x.
+      compression: zstd
+      encryption: AES256
+      maxParallel: 8
+    data:
+      compression: gzip     # data NO admite zstd (solo bzip2|gzip|lz4|snappy)
+      encryption: AES256
+      jobs: 2
+      immediateCheckpoint: false
+    tags:
+      env: "pdn"
+      sistema: "ingenia365erp"
+      clasificacion: "confidencial"
+    historyTags:
+      env: "pdn"
+      tipo: "wal-history"
+  instanceSidecarConfiguration:
+    logLevel: info
+    retentionPolicyIntervalSeconds: 1800
+    resources:
+      requests: { cpu: "50m",  memory: "128Mi" }
+      limits:   { cpu: "500m", memory: "512Mi" }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: erp-db-diario
+  namespace: erp-pdn
+spec:
+  cluster: { name: erp-db }
+  # CRON DE 6 CAMPOS (segundos minutos horas dia mes dia-semana).
+  # Trampa: "30 6 * * *" (5 campos) se acepta y corre a una hora distinta.
+  # 06:30 UTC = 01:30 en Colombia: despues del cierre nocturno, antes de la
+  # jornada de las cooperativas, y fuera de la ventana de mantenimiento.
+  schedule: "0 30 6 * * *"
+  method: plugin                 # el default sigue siendo la ruta deprecada
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  # "cluster" (el default es "none") preserva el historico de respaldos aunque
+  # se edite este recurso: rastro de auditoria.
+  backupOwnerReference: cluster
+  target: primary
+  immediate: true                # dispara uno al crear: valida la config ya
+  suspend: false

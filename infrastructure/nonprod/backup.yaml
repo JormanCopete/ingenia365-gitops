@@ -1,0 +1,74 @@
+# Respaldo de DEV y QA. Retencion menor: su valor es validar que el mecanismo
+# funciona y poder rehacer un ambiente, no preservar informacion.
+# DEV ademas sirve de PILOTO: aqui se prueba cualquier cambio de respaldo antes
+# de tocar produccion.
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: erp-dev-store
+  namespace: erp-dev
+  labels: { ambiente: dev }
+spec:
+  retentionPolicy: "7d"
+  configuration:
+    destinationPath: "s3://ingenia365-erp-backups/erp/dev"
+    s3Credentials:
+      accessKeyId:     { name: s3-backup-creds, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: s3-backup-creds, key: ACCESS_SECRET_KEY }
+      region:          { name: s3-backup-creds, key: AWS_REGION }
+    wal:  { compression: zstd, maxParallel: 4 }
+    data: { compression: gzip, jobs: 1 }
+    tags: { env: "dev", sistema: "ingenia365erp" }
+  instanceSidecarConfiguration:
+    logLevel: debug     # piloto: queremos ver todo antes de replicar en PDN
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: erp-db-diario
+  namespace: erp-dev
+spec:
+  cluster: { name: erp-db }
+  schedule: "0 30 7 * * *"      # 07:30 UTC = 02:30 COT (escalonado con QA)
+  method: plugin
+  pluginConfiguration: { name: barman-cloud.cloudnative-pg.io }
+  backupOwnerReference: self
+  target: primary
+  immediate: true
+  suspend: false
+---
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: erp-qa-store
+  namespace: erp-qa
+  labels: { ambiente: qa }
+spec:
+  retentionPolicy: "14d"
+  configuration:
+    destinationPath: "s3://ingenia365-erp-backups/erp/qa"
+    s3Credentials:
+      accessKeyId:     { name: s3-backup-creds, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: s3-backup-creds, key: ACCESS_SECRET_KEY }
+      region:          { name: s3-backup-creds, key: AWS_REGION }
+    wal:  { compression: zstd, maxParallel: 4 }
+    data: { compression: gzip, jobs: 1 }
+    tags: { env: "qa", sistema: "ingenia365erp" }
+  instanceSidecarConfiguration:
+    logLevel: info
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: erp-db-diario
+  namespace: erp-qa
+spec:
+  cluster: { name: erp-db }
+  schedule: "0 0 8 * * *"       # 08:00 UTC = 03:00 COT
+  method: plugin
+  pluginConfiguration: { name: barman-cloud.cloudnative-pg.io }
+  backupOwnerReference: self
+  target: primary
+  immediate: true
+  suspend: false
