@@ -1,0 +1,67 @@
+# Limites y disponibilidad exclusivos de produccion.
+#
+# NOTA sobre PodDisruptionBudget con UN SOLO NODO: con minAvailable=1 y 2
+# replicas en el mismo nodo, `kubectl drain` (parcheo de kernel) queda bloqueado.
+# Es intencional: obliga a una ventana de mantenimiento anunciada en vez de
+# tumbar el ERP sin aviso. Al agregar el segundo nodo, drain funciona solo.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: erp-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: erp-api }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: erp-web
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: erp-web }
+---
+# Techo de consumo del namespace: ningun despliegue puede ahogar a PostgreSQL
+# ni al sistema operativo del unico nodo de produccion.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: erp-pdn-quota
+spec:
+  hard:
+    requests.cpu: "3"
+    requests.memory: 5Gi
+    limits.memory: 8Gi
+    persistentvolumeclaims: "10"
+---
+# Todo contenedor sin limites explicitos recibe estos: un pod mal configurado
+# no puede consumir el nodo entero.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: erp-pdn-limits
+spec:
+  limits:
+    - type: Container
+      default: { cpu: "500m", memory: 512Mi }
+      defaultRequest: { cpu: "100m", memory: 128Mi }
+      max: { memory: 2Gi }
+---
+# Aislamiento este-oeste: los pods del ERP solo aceptan trafico de Traefik y de
+# sus propios pares. Un pod comprometido en otro namespace no los alcanza.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: erp-solo-ingress-y-pares
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/part-of: ingenia365erp }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: erp-pdn }
+        - podSelector: {}

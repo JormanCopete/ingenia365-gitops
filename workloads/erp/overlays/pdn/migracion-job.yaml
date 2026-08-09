@@ -1,0 +1,52 @@
+# Trabajo de migracion previo al despliegue (Argo CD PreSync hook).
+#
+# Por que existe: en produccion Database__AutoMigrate=false, asi que la API se
+# NIEGA a arrancar si hay migraciones pendientes (fail-fast, decision de diseno).
+# Este Job las aplica ANTES de rotar los pods, con dos garantias:
+#   - Corre una sola vez por sincronizacion, antes que cualquier pod nuevo.
+#   - El DbMigrator toma un lock nativo (pg_advisory_lock), asi que aunque se
+#     ejecutara dos veces en paralelo, solo una aplica el esquema.
+# Si el Job falla, Argo CD ABORTA la sincronizacion y los pods viejos siguen
+# sirviendo con el esquema viejo: no hay ventana de incompatibilidad.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: erp-db-migrate
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400   # conserva los logs 24 h para diagnostico
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: erp-db-migrate }
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrator
+          image: ghcr.io/jormancopete/ingenia365erp/migrator:main
+          args: ["migrate", "--scope", "all"]
+          env:
+            - name: DOTNET_ENVIRONMENT
+              value: Production
+            - name: Database__Provider
+              value: PostgreSQL
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: erp-db-app, key: username } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: erp-db-app, key: password } }
+            - name: Database__ConnectionStrings__PostgreSQL
+              value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+            - name: Database__AdminConnectionStrings__PostgreSQL
+              value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp_admin;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }

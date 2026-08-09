@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: erp-dev
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: workloads/erp/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: erp-dev
+  syncPolicy:
+    # DEV: totalmente automatico. Un merge llega solo; si alguien toca el
+    # cluster a mano, selfHeal lo revierte al estado de Git.
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: erp-qa
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: workloads/erp/overlays/qa
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: erp-qa
+  syncPolicy:
+    # QA: automatico pero SIN selfHeal, para poder congelar un estado durante
+    # una certificacion sin que Argo lo revierta.
+    automated: { prune: true, selfHeal: false }
+    syncOptions: [CreateNamespace=false, ServerSideApply=true]

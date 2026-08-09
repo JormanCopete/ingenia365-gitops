@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base comun de los 3 ambientes. Todo lo que varia (replicas, imagen, dominio,
+# AutoMigrate, seeds) se define en overlays/{dev,qa,pdn}.
+resources:
+  - api.yaml
+  - web.yaml
+  - dependencias.yaml
+  - enrutamiento.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: ingenia365erp
+  app.kubernetes.io/managed-by: argocd
+
+configMapGenerator:
+  - name: erp-config
+    literals:
+      # Contenedores SIEMPRE en UTC. La conversion a America/Bogota ocurre solo
+      # en presentacion y reportes: un cierre contable corrido 5 horas seria un
+      # hallazgo de auditoria.
+      - TZ=UTC
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+      - Database__Startup__RetryWindowSeconds=120
+      - Database__Startup__RetryIntervalSeconds=5
+      - PwnedPassword__Enabled=true
+      - Serilog__MinimumLevel__Default=Information
+
+generatorOptions:
+  disableNameSuffixHash: false   # el hash fuerza rollout cuando cambia la config

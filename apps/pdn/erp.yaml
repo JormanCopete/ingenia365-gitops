@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: erp-pdn
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: workloads/erp/overlays/pdn
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: erp-pdn
+  syncPolicy:
+    # PRODUCCION: sincronizacion MANUAL a proposito. Un merge no despliega solo;
+    # alguien aprueba desde Argo CD. Es el control de cambios que un producto
+    # regulado necesita (y el registro de quien aprobo queda en Argo CD).
+    automated: null
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }
+  # El operador CloudNativePG y los seeds mutan estos campos: no son "drift".
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: ["/spec/replicas"]

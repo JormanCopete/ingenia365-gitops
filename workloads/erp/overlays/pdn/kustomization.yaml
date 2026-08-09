@@ -1,0 +1,44 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: erp-pdn
+resources:
+  - ../../base
+  - migracion-job.yaml
+  - disponibilidad.yaml
+
+# PRODUCCION: no se auto-migra (fail-fast si hay pendientes) y no lleva datos
+# demo. El esquema lo aplica el Job PreSync antes de rotar los pods.
+configMapGenerator:
+  - name: erp-config
+    behavior: merge
+    literals:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Database__AutoMigrate=false
+      - Database__Seed__RunParametricSeed=true
+      - Database__Seed__RunTestSeed=false
+      - EmailSender__InvitationLinkBaseUrl=https://app.ingenia365.com
+      - EmailSender__PasswordResetLinkBaseUrl=https://app.ingenia365.com
+      - Serilog__MinimumLevel__Default=Information
+
+images:
+  - name: ghcr.io/jormancopete/ingenia365erp/api
+    newTag: main
+  - name: ghcr.io/jormancopete/ingenia365erp/web
+    newTag: main
+  - name: ghcr.io/jormancopete/ingenia365erp/migrator
+    newTag: main
+
+patches:
+  # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.
+  # (La Web no tiene circuitos Blazor Server, asi que no necesita afinidad.)
+  - target: { kind: Deployment, name: erp-api }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+  - target: { kind: Deployment, name: erp-web }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2

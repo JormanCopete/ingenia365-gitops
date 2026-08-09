@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-web
+  labels: { app.kubernetes.io/name: erp-web, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: erp-web }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: erp-web, app.kubernetes.io/part-of: ingenia365erp }
+    spec:
+      # La Web usa AddInteractiveWebAssemblyRenderMode SIN componentes Server:
+      # no hay circuitos Blazor Server, por lo que escala horizontalmente sin
+      # sticky sessions (verificado en el codigo, no asumido).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: web
+          image: ghcr.io/jormancopete/ingenia365erp/web:develop
+          imagePullPolicy: IfNotPresent
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - configMapRef: { name: erp-config }
+          env:
+            # La Web habla con la API por el Service interno del cluster.
+            - name: ApiSettings__BaseUrl
+              value: "http://erp-api"
+            - name: AppMode__ApiBaseUrl
+              value: "http://erp-api"
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { memory: 768Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erp-web
+  labels: { app.kubernetes.io/name: erp-web }
+spec:
+  selector: { app.kubernetes.io/name: erp-web }
+  ports:
+    - { name: http, port: 80, targetPort: http }

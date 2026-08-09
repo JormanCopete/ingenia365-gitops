@@ -1,0 +1,32 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: erp-qa
+resources:
+  - ../../base
+
+# QA: se auto-migra (para probar que las migraciones aplican limpio) y lleva
+# datos demo para certificacion funcional. Es el ensayo general de produccion.
+configMapGenerator:
+  - name: erp-config
+    behavior: merge
+    literals:
+      - ASPNETCORE_ENVIRONMENT=QA
+      - Database__AutoMigrate=true
+      - Database__Seed__RunParametricSeed=true
+      - Database__Seed__RunTestSeed=true
+      - EmailSender__InvitationLinkBaseUrl=https://app-qa.ingenia365.com
+      - EmailSender__PasswordResetLinkBaseUrl=https://app-qa.ingenia365.com
+
+images:
+  - name: ghcr.io/jormancopete/ingenia365erp/api
+    newTag: develop
+  - name: ghcr.io/jormancopete/ingenia365erp/web
+    newTag: develop
+
+patches:
+  - target: { kind: StatefulSet, name: erp-mongo }
+    patch: |-
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 5Gi
