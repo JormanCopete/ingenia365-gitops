@@ -1,0 +1,97 @@
+# Conector de Cloudflare Tunnel para PRODUCCION.
+#
+# Es la UNICA via de entrada de trafico de usuarios: no hay puertos abiertos en
+# la VPS. cloudflared abre una conexion SALIENTE hacia Cloudflare y el trafico
+# vuelve por ahi. La IP del servidor nunca se expone.
+#
+# Requiere el Secret cloudflared-token (creado con
+# tools/scripts/crear-secreto-tunel.ps1 del repo del ERP).
+#
+# El enrutamiento (que hostname va a que servicio) se configura en el panel de
+# Cloudflare: Zero Trust -> Networks -> Tunnels -> erp-pdn -> Public Hostnames.
+#   app.ingenia365.com  ->  http://traefik.kube-system.svc.cluster.local:80
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflare
+  labels: { app.kubernetes.io/name: cloudflared }
+spec:
+  # DOS replicas: cada una abre sus propias conexiones al borde de Cloudflare.
+  # Si un pod muere o se actualiza, el tunel NO se corta. Con una sola replica
+  # cualquier reinicio seria una caida del sitio.
+  replicas: 2
+  selector:
+    matchLabels: { app.kubernetes.io/name: cloudflared }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: cloudflared }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      # Reparte las replicas entre nodos cuando exista mas de uno.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: cloudflared }
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000        # metricas para Prometheus
+            - run
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef: { name: cloudflared-token, key: token }
+          ports:
+            - { name: metrics, containerPort: 2000 }
+          livenessProbe:
+            httpGet: { path: /ready, port: metrics }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ready, port: metrics }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+# Si ambas replicas caen, el sitio queda inaccesible: el PDB lo impide durante
+# mantenimientos planificados.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloudflared
+  namespace: cloudflare
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: cloudflared }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflared-metrics
+  namespace: cloudflare
+  labels: { app.kubernetes.io/name: cloudflared }
+spec:
+  selector: { app.kubernetes.io/name: cloudflared }
+  ports:
+    - { name: metrics, port: 2000, targetPort: metrics }
