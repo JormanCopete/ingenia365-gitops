@@ -14,6 +14,11 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: erp-api, app.kubernetes.io/part-of: ingenia365erp }
     spec:
+      # Las imagenes son paquetes PRIVADOS de GHCR: contienen el codigo compilado
+      # del producto. El secreto lo crea tools/scripts/crear-secreto-ghcr.ps1 del
+      # repositorio de la aplicacion; el token nunca pasa por este repositorio.
+      imagePullSecrets:
+        - name: ghcr-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

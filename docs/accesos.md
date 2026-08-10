@@ -78,6 +78,25 @@ validarse en producción.
 > verificar tokens antiguos durante una auditoría. Guardar la clave retirada en
 > un lugar seguro antes de reemplazarla.
 
+## Descarga de imágenes (GHCR)
+
+Las imágenes del ERP se publican como paquetes **privados**: contienen el código
+compilado del producto. Cada namespace necesita el Secret `ghcr-pull`, o los pods
+quedan en `ImagePullBackOff` con `unauthorized` aunque la imagen exista.
+
+Se crea con `tools/scripts/crear-secreto-ghcr.ps1` (en el repo de la aplicación).
+El token es un **PAT classic con un único permiso: `read:packages`** — vive dentro
+de los servidores, así que no debe poder escribir nada.
+
+```bash
+ssh -i ~/.ssh/ingenia365_deploy root@100.94.218.42 \
+  "k3s kubectl get secret ghcr-pull -n erp-dev"
+```
+
+> Alternativa descartada: hacer públicos los paquetes evitaría el token, pero
+> expondría el código compilado del ERP a cualquiera. Para un producto financiero
+> no compensa el ahorro de una credencial.
+
 ## Llaves SSH
 
 | Llave | Uso |

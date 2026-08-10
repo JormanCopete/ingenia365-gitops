@@ -17,6 +17,8 @@ spec:
       # La Web usa AddInteractiveWebAssemblyRenderMode SIN componentes Server:
       # no hay circuitos Blazor Server, por lo que escala horizontalmente sin
       # sticky sessions (verificado en el codigo, no asumido).
+      imagePullSecrets:
+        - name: ghcr-pull
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
