@@ -26,14 +26,19 @@ spec:
             - --maxmemory-policy
             - allkeys-lru
           ports: [{ name: redis, containerPort: 6379 }]
+          # timeoutSeconds explicito: redis-cli tambien lanza un proceso. Arranca
+          # mucho mas rapido que mongosh, pero con el default de 1 s bastaria una
+          # pausa de CPU para que kubelet reiniciara un Redis perfectamente sano.
           livenessProbe:
             exec: { command: ["redis-cli", "ping"] }
             initialDelaySeconds: 10
             periodSeconds: 15
+            timeoutSeconds: 5
           readinessProbe:
             exec: { command: ["redis-cli", "ping"] }
             initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests: { cpu: 50m, memory: 128Mi }
             limits:   { memory: 384Mi }
@@ -79,14 +84,37 @@ spec:
         - name: mongo
           image: mongo:7
           ports: [{ name: mongo, containerPort: 27017 }]
+          # OJO con timeoutSeconds: si no se declara, Kubernetes usa 1 SEGUNDO.
+          # `mongosh` es una shell de Node y tarda varios segundos solo en
+          # arrancar, asi que ninguna sonda alcanzaba a responder: la de vida
+          # fallaba 3 veces seguidas y kubelet mataba el contenedor. MongoDB
+          # estaba sano y aun asi acumulo 43 reinicios.
+          #
+          # Vida: comprobacion TCP, que no lanza ningun proceso. Responde "el
+          # servidor esta escuchando", que es justo lo que debe decidir si se
+          # reinicia el contenedor.
           livenessProbe:
-            exec: { command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"] }
+            tcpSocket: { port: mongo }
             initialDelaySeconds: 30
             periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Disponibilidad: aca si vale pagar el costo de mongosh, porque
+          # comprueba que el motor responde consultas, no solo que el puerto
+          # esta abierto. Con margen suficiente para que termine.
           readinessProbe:
             exec: { command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"] }
             initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          # Da hasta 2 minutos al primer arranque (creacion de /data/db y
+          # recuperacion del journal) sin que la sonda de vida intervenga.
+          startupProbe:
+            tcpSocket: { port: mongo }
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
           resources:
             requests: { cpu: 100m, memory: 384Mi }
             limits:   { memory: 1Gi }
