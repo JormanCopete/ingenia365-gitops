@@ -31,3 +31,14 @@ spec:
     - group: apps
       kind: Deployment
       jsonPointers: ["/spec/replicas"]
+    # volumeClaimTemplates es INMUTABLE y Kubernetes le inyecta campos propios
+    # (status, creationTimestamp) que el manifiesto no declara. Sin esta
+    # excepcion la aplicacion queda OutOfSync de forma permanente aunque el
+    # apply sea exitoso: verificado en DEV y QA antes de traerlo aca.
+    #
+    # En produccion importa el doble: la sincronizacion es MANUAL, asi que el
+    # estado OutOfSync es la senal con la que alguien decide aprobar un
+    # despliegue. Si esa senal esta siempre encendida, deja de significar algo.
+    - group: apps
+      kind: StatefulSet
+      jsonPointers: ["/spec/volumeClaimTemplates"]

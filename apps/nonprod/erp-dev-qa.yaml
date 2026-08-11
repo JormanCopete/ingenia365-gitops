@@ -18,6 +18,22 @@ spec:
     # cluster a mano, selfHeal lo revierte al estado de Git.
     automated: { prune: true, selfHeal: true }
     syncOptions: [CreateNamespace=false, ServerSideApply=true]
+  # volumeClaimTemplates es INMUTABLE en un StatefulSet y Kubernetes le inyecta
+  # campos propios (status, creationTimestamp) que el manifiesto no declara. Sin
+  # esta excepcion, la aplicacion queda OutOfSync de forma PERMANENTE: se
+  # comprobo que `argocd app diff` sale limpio y que el apply es exitoso
+  # (serverside-applied) y aun asi el estado no cambiaba.
+  #
+  # No es "ignorar un problema": una diferencia ahi NO ES ACCIONABLE, porque
+  # Kubernetes no permite modificar ese bloque. Lo peligroso es lo contrario —
+  # una aplicacion siempre en OutOfSync ensena al equipo a ignorar justo la
+  # senal que debe avisar de una deriva real en produccion.
+  #
+  # Cambiar el tamano del volumen sigue exigiendo recrear el StatefulSet a mano.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers: ["/spec/volumeClaimTemplates"]
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -39,3 +55,19 @@ spec:
     # una certificacion sin que Argo lo revierta.
     automated: { prune: true, selfHeal: false }
     syncOptions: [CreateNamespace=false, ServerSideApply=true]
+  # volumeClaimTemplates es INMUTABLE en un StatefulSet y Kubernetes le inyecta
+  # campos propios (status, creationTimestamp) que el manifiesto no declara. Sin
+  # esta excepcion, la aplicacion queda OutOfSync de forma PERMANENTE: se
+  # comprobo que `argocd app diff` sale limpio y que el apply es exitoso
+  # (serverside-applied) y aun asi el estado no cambiaba.
+  #
+  # No es "ignorar un problema": una diferencia ahi NO ES ACCIONABLE, porque
+  # Kubernetes no permite modificar ese bloque. Lo peligroso es lo contrario —
+  # una aplicacion siempre en OutOfSync ensena al equipo a ignorar justo la
+  # senal que debe avisar de una deriva real en produccion.
+  #
+  # Cambiar el tamano del volumen sigue exigiendo recrear el StatefulSet a mano.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers: ["/spec/volumeClaimTemplates"]
