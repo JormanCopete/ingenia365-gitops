@@ -88,6 +88,12 @@ Se crea con `tools/scripts/crear-secreto-ghcr.ps1` (en el repo de la aplicación
 El token es un **PAT classic con un único permiso: `read:packages`** — vive dentro
 de los servidores, así que no debe poder escribir nada.
 
+> ⏰ **Vence a los 90 días** (creado el 2026-08-11 → renovar antes del **2026-11-09**).
+> Al vencer, los pods **en marcha siguen funcionando**: el fallo aparece recién
+> cuando un pod se reinicia o se despliega una versión nueva, que es el peor
+> momento para descubrirlo. Rotarlo es generar otro token y volver a correr el
+> mismo script.
+
 ```bash
 ssh -i ~/.ssh/ingenia365_deploy root@100.94.218.42 \
   "k3s kubectl get secret ghcr-pull -n erp-dev"
