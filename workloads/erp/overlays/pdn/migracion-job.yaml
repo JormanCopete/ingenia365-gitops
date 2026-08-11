@@ -31,7 +31,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: migrator
-          image: ghcr.io/jormancopete/ingenia365erp/migrator:main
+          image: ghcr.io/jormancopete/ingenia365erp/migrator:release
           args: ["migrate", "--scope", "all"]
           env:
             - name: DOTNET_ENVIRONMENT

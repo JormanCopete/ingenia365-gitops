@@ -23,11 +23,11 @@ configMapGenerator:
 
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    newTag: main
+    newTag: release
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    newTag: main
+    newTag: release
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
-    newTag: main
+    newTag: release
 
 patches:
   # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.
