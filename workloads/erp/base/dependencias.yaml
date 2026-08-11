@@ -140,6 +140,12 @@ spec:
         # El dia que se migre a un almacenamiento que SI aplique cuota y ofrezca
         # redundancia, cambiar este valor exige recrear el StatefulSet.
         resources: { requests: { storage: 5Gi } }
+        # volumeMode explicito aunque sea el valor por defecto: el API server lo
+        # rellena solo, y al no estar declarado Argo comparaba un manifiesto sin
+        # el campo contra un objeto que si lo tiene y marcaba la aplicacion
+        # OutOfSync de forma permanente. `kubectl diff` salia limpio, o sea que
+        # no habia deriva real: era ruido de normalizacion. Declararlo lo elimina.
+        volumeMode: Filesystem
 ---
 apiVersion: v1
 kind: Service
