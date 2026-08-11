@@ -129,7 +129,17 @@ spec:
         # ATENCION: la auditoria SARLAFT (retencion 5 anos) vive aqui y NO esta
         # cubierta por los backups de CloudNativePG. Requiere su propio respaldo
         # a S3 con inmutabilidad - ver docs/backups.md.
-        resources: { requests: { storage: 20Gi } }
+        #
+        # Este numero es CONTABLE, no un limite: el provisionador local-path no
+        # aplica cuota, asi que el volumen dispone del disco entero del nodo
+        # (medido: 193G totales, 179G libres). Se deja en 5Gi porque coincide con
+        # los StatefulSet ya creados y volumeClaimTemplates es INMUTABLE: pedir
+        # otro tamano deja la aplicacion OutOfSync de forma permanente sin que
+        # Argo pueda reconciliarla nunca.
+        #
+        # El dia que se migre a un almacenamiento que SI aplique cuota y ofrezca
+        # redundancia, cambiar este valor exige recrear el StatefulSet.
+        resources: { requests: { storage: 5Gi } }
 ---
 apiVersion: v1
 kind: Service
