@@ -94,6 +94,11 @@ spec:
           # Se hace AHORA porque convertir una base vacia es gratis; hacerlo con
           # cinco anos de auditoria encima es una migracion.
           args: ["--replSet", "rs0", "--bind_ip_all"]
+          env:
+            # Lo usa el hook para confirmar que su nombre DNS ya apunta a ESTE
+            # pod antes de iniciar el replica set.
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
           lifecycle:
             postStart:
               exec:
@@ -117,6 +122,18 @@ spec:
                     echo "[rs-init] esperando a que mongod acepte conexiones"
                     for i in $(seq 1 60); do
                       mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1 && break
+                      sleep 2
+                    done
+                    # ESPERA CLAVE: mongod valida que algun miembro de la
+                    # configuracion resuelva A SI MISMO y rechaza el conjunto con
+                    # NodeNotFound si no. Tras recrear el pod, CoreDNS tarda unos
+                    # segundos en publicar el registro; sin esta espera el hook
+                    # arranca antes y la iniciacion falla una sola vez, sin
+                    # reintento, dejando el nodo standalone para siempre.
+                    echo "[rs-init] esperando a que erp-mongo-0.erp-mongo resuelva a $POD_IP"
+                    for i in $(seq 1 90); do
+                      IP=$(getent hosts erp-mongo-0.erp-mongo 2>/dev/null | awk '{print $1}' | head -1)
+                      [ "$IP" = "$POD_IP" ] && { echo "[rs-init] DNS listo tras $((i*2))s"; break; }
                       sleep 2
                     done
                     echo "[rs-init] estado del replica set:"
