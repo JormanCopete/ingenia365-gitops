@@ -76,11 +76,22 @@ spec:
           image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.17.0
           args:
             - --resources=pods,nodes,deployments,statefulsets,jobs,cronjobs,persistentvolumeclaims
-          ports: [{ name: http, containerPort: 8080 }]
+          # DOS puertos, y no es un detalle: kube-state-metrics sirve /metrics en
+          # el 8080 pero /readyz y /healthz en el 8081 (telemetria). Apuntar la
+          # sonda al 8080 devuelve 404 y el pod nunca queda listo, aunque el
+          # proceso este perfectamente sano.
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: telemetria, containerPort: 8081 }
           readinessProbe:
-            httpGet: { path: /readyz, port: http }
+            httpGet: { path: /readyz, port: telemetria }
             initialDelaySeconds: 5
             periodSeconds: 20
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: telemetria }
+            initialDelaySeconds: 15
+            periodSeconds: 30
             timeoutSeconds: 5
           resources:
             requests: { cpu: 20m, memory: 64Mi }
