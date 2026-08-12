@@ -124,30 +124,39 @@ spec:
                       mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1 && break
                       sleep 2
                     done
-                    # ESPERA CLAVE: mongod valida que algun miembro de la
-                    # configuracion resuelva A SI MISMO y rechaza el conjunto con
-                    # NodeNotFound si no. Tras recrear el pod, CoreDNS tarda unos
-                    # segundos en publicar el registro; sin esta espera el hook
-                    # arranca antes y la iniciacion falla una sola vez, sin
-                    # reintento, dejando el nodo standalone para siempre.
-                    echo "[rs-init] esperando a que erp-mongo-0.erp-mongo resuelva a $POD_IP"
+                    # REINTENTOS, no una ventana fija. mongod valida que algun
+                    # miembro de la configuracion resuelva A SI MISMO y rechaza
+                    # el conjunto con NodeNotFound si no; tras recrear el pod ese
+                    # registro DNS tarda en publicarse, y se midio que puede
+                    # tardar mas de tres minutos.
+                    #
+                    # La version anterior esperaba una ventana fija y luego hacia
+                    # UN solo intento. Al agotarse la ventana fallaba para
+                    # siempre: postStart corre una unica vez por arranque del
+                    # contenedor, de modo que una carrera perdida contra el DNS
+                    # dejaba el nodo standalone de forma permanente.
+                    #
+                    # Reintentar es lo correcto: no hace falta acertar cuanto
+                    # tarda el DNS, solo insistir hasta que responda.
                     for i in $(seq 1 90); do
-                      IP=$(getent hosts erp-mongo-0.erp-mongo 2>/dev/null | awk '{print $1}' | head -1)
-                      [ "$IP" = "$POD_IP" ] && { echo "[rs-init] DNS listo tras $((i*2))s"; break; }
-                      sleep 2
+                      RES=$(mongosh --quiet --eval '
+                        try {
+                          var s = rs.status();
+                          print("LISTO " + s.set + " estado=" + s.myState);
+                        } catch (e) {
+                          try {
+                            rs.initiate({_id:"rs0",members:[{_id:0,host:"erp-mongo-0.erp-mongo:27017"}]});
+                            print("INICIADO");
+                          } catch (e2) {
+                            print("PENDIENTE " + e2.codeName);
+                          }
+                        }' 2>&1 | tail -1)
+                      echo "[rs-init] intento $i: $RES"
+                      case "$RES" in
+                        LISTO*|INICIADO*) echo "[rs-init] replica set operativo"; break ;;
+                      esac
+                      sleep 5
                     done
-                    echo "[rs-init] estado del replica set:"
-                    mongosh --quiet --eval '
-                      try {
-                        var s = rs.status();
-                        print("[rs-init] ya iniciado: " + s.set + " estado=" + s.myState);
-                      } catch (e) {
-                        print("[rs-init] sin configurar (" + e.codeName + "), iniciando");
-                        printjson(rs.initiate({
-                          _id: "rs0",
-                          members: [{ _id: 0, host: "erp-mongo-0.erp-mongo:27017" }]
-                        }));
-                      }'
                     exit 0
           # OJO con timeoutSeconds: si no se declara, Kubernetes usa 1 SEGUNDO.
           # `mongosh` es una shell de Node y tarda varios segundos solo en
