@@ -49,10 +49,14 @@ spec:
               value: "erp-redis:6379,abortConnect=false"
             - name: Redis__ConnectionString
               value: "erp-redis:6379,abortConnect=false"
+            # replicaSet=rs0: MongoDB corre como replica set de un nodo para
+            # tener oplog (requisito de un respaldo consistente de la auditoria
+            # SARLAFT). Con este parametro el driver ademas habilita
+            # transacciones multidocumento y change streams.
             - name: MongoDb__ConnectionString
-              value: "mongodb://erp-mongo:27017"
+              value: "mongodb://erp-mongo:27017/?replicaSet=rs0"
             - name: ConnectionStrings__MongoDB
-              value: "mongodb://erp-mongo:27017"
+              value: "mongodb://erp-mongo:27017/?replicaSet=rs0"
             # --- Identidad: claves RS256 montadas desde Secret ---
             - name: JwtSettings__PrivateKeyPath
               value: /keys/jwt_private.pem

@@ -1113,10 +1113,21 @@ CNPG no cubre MongoDB, y hay un problema más profundo: **MongoDB no tiene WORM*
 
 Nivel operativo — diario 07:15 UTC (después del backup de Postgres, para no competir por I/O):
 ```bash
-mongodump --uri "$MONGO_URI" --db IngenIA365ERP_Audit --oplog --archive --gzip > /tmp/audit-$(date -u +%F).archive.gz
+# --oplog es INCOMPATIBLE con --db y --collection: exige un volcado de instancia
+# completa. La instancia solo contiene las bases del ERP, así que no se pierde
+# nada, y a cambio la copia queda consistente.
+mongodump --uri "$MONGO_URI" --oplog --archive=/tmp/audit-$(date -u +%F).archive.gz --gzip
 aws s3 cp /tmp/audit-$(date -u +%F).archive.gz \
   s3://ingenia365-erp-backups/mongo/diario/$(date -u +%Y/%m)/ --checksum-algorithm SHA256 --sse AES256
 ```
+
+> 🔧 **Corrección aplicada (2026-08-11).** Este bloque especificaba
+> `mongodump --db ... --oplog`, una combinación que MongoDB rechaza. Habría
+> fallado en la primera ejecución. Se detectó al implementarlo, no al diseñarlo:
+> **el diseño no es evidencia — solo la ejecución lo es.**
+>
+> Implementado en `infrastructure/pdn/backup-mongo.yaml` (producción) y
+> `infrastructure/nonprod/backup-mongo.yaml` (banco de pruebas en DEV).
 Hereda el Governance de 40 días del bucket; la regla `expirar-dumps-mongo-diarios` de §5.1 lo purga a los 35. Aquí sí es correcto usar `Expiration` de lifecycle: cada objeto es autocontenido, no hay catálogo tipo Barman que se pueda desincronizar.
 
 Nivel regulatorio — día 2 de cada mes, 08:00 UTC, sella el mes anterior en **JSON + gzip** (no BSON: el archivo debe ser legible en 2031 sin herramientas de Mongo):

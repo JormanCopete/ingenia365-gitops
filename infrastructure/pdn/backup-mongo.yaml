@@ -1,0 +1,229 @@
+# Respaldo de MongoDB — auditoria SARLAFT (produccion)
+#
+# POR QUE EXISTE: CloudNativePG respalda PostgreSQL, pero NADIE respaldaba
+# MongoDB, que es donde vive la auditoria con retencion obligatoria de 5 anos.
+# El volumen es disco local del nodo (local-path): sin redundancia. Si ese disco
+# muere, la evidencia regulatoria desaparece.
+#
+# DOS NIVELES, no uno. El error a evitar es hacer un volcado diario y bloquearlo
+# 5 anos: un evento de hoy aparecería en ~1.825 volcados, decenas de TB
+# inmutables e incorregibles.
+#
+#   - Diario (operativo): recuperacion ante desastre. Se purga a los 35 dias.
+#   - Mensual (regulatorio): sella el mes cerrado en JSON legible sin
+#     herramientas de Mongo, con Object Lock en modo COMPLIANCE.
+#
+# LA INMUTABILIDAD NO LA DA MONGODB. `AppendOnlyAuditWriter` impone append-only
+# a nivel de aplicacion, pero cualquiera con credenciales de admin ejecuta
+# db.auditLogs.deleteMany({}). La evidencia defendible la da S3 Object Lock.
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongo-respaldo-diario
+  namespace: erp-pdn
+  labels: { app.kubernetes.io/name: mongo-backup, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  # 07:15 UTC = 02:15 en Bogota. Despues del respaldo de PostgreSQL (06:30 UTC)
+  # para no competir por I/O en un nodo unico.
+  schedule: "15 7 * * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  # startingDeadlineSeconds: si el nodo estuvo caido a la hora programada, se
+  # ejecuta igual dentro de las 2 h siguientes en vez de saltarse el dia.
+  startingDeadlineSeconds: 7200
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels: { app.kubernetes.io/name: mongo-backup }
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+            seccompProfile: { type: RuntimeDefault }
+          initContainers:
+            - name: volcado
+              image: mongo:7
+              # OJO: --oplog es INCOMPATIBLE con --db y --collection; exige un
+              # volcado de instancia completa. La instancia solo contiene las
+              # bases del ERP, asi que no se pierde nada, y a cambio la copia es
+              # CONSISTENTE: sin oplog el volcado mezcla escrituras de distintos
+              # instantes y deja de ser evidencia defendible.
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  FECHA=$(date -u +%F)
+                  mongodump \
+                    --uri "mongodb://erp-mongo:27017/?replicaSet=rs0" \
+                    --oplog --archive="/trabajo/audit-${FECHA}.archive.gz" --gzip
+                  ls -lh /trabajo/
+              volumeMounts: [{ name: trabajo, mountPath: /trabajo }]
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits:   { memory: 1Gi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+          containers:
+            - name: subida
+              image: amazon/aws-cli:2.31.9
+              # --checksum-algorithm SHA256: S3 verifica la integridad al subir.
+              # Un archivo corrupto que se descubre durante una restauracion, en
+              # plena crisis, no es un respaldo.
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  FECHA=$(date -u +%F)
+                  ANIOMES=$(date -u +%Y/%m)
+                  aws s3 cp "/trabajo/audit-${FECHA}.archive.gz" \
+                    "s3://ingenia365-erp-backups/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
+                    --checksum-algorithm SHA256 --sse AES256
+                  # Comprobacion explicita: que el objeto exista en destino, no
+                  # que el comando haya salido con codigo 0.
+                  aws s3api head-object \
+                    --bucket ingenia365-erp-backups \
+                    --key "mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
+                    --query 'ContentLength' --output text
+              env:
+                - name: HOME
+                  value: /trabajo
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: { secretKeyRef: { name: s3-backup-creds, key: ACCESS_KEY_ID } }
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: { secretKeyRef: { name: s3-backup-creds, key: ACCESS_SECRET_KEY } }
+                - name: AWS_DEFAULT_REGION
+                  valueFrom: { secretKeyRef: { name: s3-backup-creds, key: AWS_REGION } }
+              volumeMounts: [{ name: trabajo, mountPath: /trabajo }]
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits:   { memory: 512Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+          volumes:
+            - name: trabajo
+              emptyDir: { sizeLimit: 8Gi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongo-sellado-mensual
+  namespace: erp-pdn
+  labels: { app.kubernetes.io/name: mongo-archive, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  # SUSPENDIDO hasta que exista el bucket de archivo con Object Lock en modo
+  # COMPLIANCE (bucket distinto del operativo: ver docs/backups.md §5.3).
+  # Compliance no admite marcha atras NI para el dueno de la cuenta, asi que el
+  # bucket debe crearse a conciencia y probarse con retencion de 1 dia primero.
+  suspend: true
+  # Dia 2 de cada mes, 08:00 UTC: sella el mes ANTERIOR ya cerrado.
+  schedule: "0 8 2 * *"
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 6
+  failedJobsHistoryLimit: 6
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels: { app.kubernetes.io/name: mongo-archive }
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            fsGroup: 999
+            seccompProfile: { type: RuntimeDefault }
+          initContainers:
+            - name: exportacion
+              image: mongo:7
+              # JSON y no BSON a proposito: el archivo debe poder leerse en 2031
+              # sin herramientas de MongoDB ni una version compatible del motor.
+              #
+              # Incluye accessLogs ademas de auditLogs: la coleccion de accesos
+              # tiene TTL de 90 dias (MongoDbSettings.cs: AccessLogRetentionDays),
+              # asi que sin este sellado la trazabilidad de QUIEN consulto datos
+              # de asociados ya no existiria cuando la pidan.
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  MES=$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)
+                  SIG=$(date -u +%Y-%m)
+                  cd /trabajo
+                  for COL in auditLogs accessLogs; do
+                    mongoexport \
+                      --uri "mongodb://erp-mongo:27017/?replicaSet=rs0" \
+                      --db IngenIA365ERP_Audit --collection "$COL" --type json \
+                      --query "{\"timestamp\":{\"\$gte\":{\"\$date\":\"${MES}-01T00:00:00Z\"},\"\$lt\":{\"\$date\":\"${SIG}-01T00:00:00Z\"}}}" \
+                      --sort '{_id:1}' | gzip -9 > "${COL}-${MES}.json.gz"
+                  done
+                  sha256sum ./*.gz > SHA256SUMS
+                  printf '{"periodo":"%s","generado":"%s","colecciones":["auditLogs","accessLogs"]}\n' \
+                    "$MES" "$(date -u +%FT%TZ)" > MANIFIESTO.json
+                  cat SHA256SUMS
+              volumeMounts: [{ name: trabajo, mountPath: /trabajo }]
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits:   { memory: 1Gi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+          containers:
+            - name: sellado
+              image: amazon/aws-cli:2.31.9
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  MES=$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)
+                  # 1830 dias = 5 anos + holgura. El TTL de Mongo borra el
+                  # documento a los 5 anos del evento y el sellado ocurre hasta
+                  # 32 dias despues, de modo que el objeto en S3 sobrevive al
+                  # TTL: la evidencia dura mas que el dato caliente.
+                  HASTA=$(date -u -d "${MES}-01 +1830 days" +%Y-%m-%dT00:00:00Z)
+                  cd /trabajo
+                  for F in *.gz SHA256SUMS MANIFIESTO.json; do
+                    aws s3api put-object \
+                      --bucket ingenia365-erp-archive \
+                      --key "audit/${MES}/${F}" --body "$F" \
+                      --object-lock-mode COMPLIANCE \
+                      --object-lock-retain-until-date "$HASTA" \
+                      --checksum-algorithm SHA256 \
+                      --server-side-encryption AES256 \
+                      --query 'ETag' --output text
+                  done
+              env:
+                - name: HOME
+                  value: /trabajo
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom: { secretKeyRef: { name: s3-backup-creds, key: ACCESS_KEY_ID } }
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom: { secretKeyRef: { name: s3-backup-creds, key: ACCESS_SECRET_KEY } }
+                - name: AWS_DEFAULT_REGION
+                  valueFrom: { secretKeyRef: { name: s3-backup-creds, key: AWS_REGION } }
+              volumeMounts: [{ name: trabajo, mountPath: /trabajo }]
+              resources:
+                requests: { cpu: 100m, memory: 128Mi }
+                limits:   { memory: 512Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities: { drop: ["ALL"] }
+          volumes:
+            - name: trabajo
+              emptyDir: { sizeLimit: 8Gi }
