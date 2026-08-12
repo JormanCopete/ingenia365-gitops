@@ -47,6 +47,15 @@ rules:
   - apiGroups: [batch]
     resources: [jobs, cronjobs]
     verbs: [list, watch]
+  # Los respaldos de PostgreSQL son un recurso propio de CloudNativePG. Hace
+  # falta leerlos porque CNPG NO puebla .status.lastSuccessfulBackup cuando el
+  # respaldo se hace por plugin: la metrica
+  # cnpg_collector_last_available_backup_timestamp queda en 0 para siempre
+  # (verificado). Una alerta sobre esa metrica dispararia siempre, y una que la
+  # ignore no detectaria nunca un respaldo que dejo de correr.
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [backups, clusters]
+    verbs: [list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -55,6 +64,45 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: kube-state-metrics }
 subjects:
   - { kind: ServiceAccount, name: kube-state-metrics, namespace: monitoring }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-state-metrics-respaldos
+  namespace: monitoring
+data:
+  # Expone los recursos Backup de CloudNativePG como metricas. Es la unica
+  # fuente fiable de "cuando fue el ultimo respaldo bueno" con el metodo por
+  # plugin: el estado del Cluster no trae ese dato.
+  respaldos.yaml: |
+    kind: CustomResourceStateMetrics
+    spec:
+      resources:
+        - groupVersionKind:
+            group: postgresql.cnpg.io
+            version: v1
+            kind: Backup
+          metricNamePrefix: erp_respaldo_pg
+          labelsFromPath:
+            nombre:    [metadata, name]
+            namespace: [metadata, namespace]
+            cluster:   [spec, cluster, name]
+          metrics:
+            - name: fin_timestamp
+              help: "Momento en que termino el respaldo, en segundos desde epoch"
+              each:
+                type: Gauge
+                gauge:
+                  path: [status, stoppedAt]
+                  # KSM convierte solo las fechas RFC3339 a timestamp.
+                  nilIsZero: true
+            - name: fase
+              help: "Fase del respaldo (completed, failed, running)"
+              each:
+                type: Info
+                info:
+                  labelsFromPath:
+                    fase: [status, phase]
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -68,6 +116,8 @@ spec:
   template:
     metadata:
       labels: { app.kubernetes.io/name: kube-state-metrics }
+      annotations:
+        configuracion/version: "2"
     spec:
       serviceAccountName: kube-state-metrics
       securityContext: { runAsNonRoot: true, runAsUser: 65534, seccompProfile: { type: RuntimeDefault } }
@@ -76,6 +126,12 @@ spec:
           image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.17.0
           args:
             - --resources=pods,nodes,deployments,statefulsets,jobs,cronjobs,persistentvolumeclaims
+            - --custom-resource-state-config-file=/configuracion/respaldos.yaml
+            # Sin esto, activar el modo de recursos personalizados DESACTIVA los
+            # recursos estandar y se perderian las metricas de Jobs.
+            - --custom-resource-state-only=false
+          volumeMounts:
+            - { name: configuracion, mountPath: /configuracion }
           # DOS puertos, y no es un detalle: kube-state-metrics sirve /metrics en
           # el 8080 pero /readyz y /healthz en el 8081 (telemetria). Apuntar la
           # sonda al 8080 devuelve 404 y el pod nunca queda listo, aunque el
@@ -100,6 +156,9 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: configuracion
+          configMap: { name: kube-state-metrics-respaldos }
 ---
 apiVersion: v1
 kind: Service
