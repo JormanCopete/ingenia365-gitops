@@ -19,9 +19,35 @@
 **MongoDB — ciclo completo ensayado en DEV**, incluida la restauración: ver
 [mongo-replica-set.md](mongo-replica-set.md).
 
-> ⚠️ **Falta el ensayo de restauración de PostgreSQL.** Que el respaldo exista y
-> esté bien etiquetado no prueba que sirva. Con MongoDB el ensayo de
-> restauración destapó dos defectos; con PostgreSQL esa prueba está pendiente.
+### Ensayo de restauración de PostgreSQL — PASADO (2026-08-12)
+
+Se restauró el respaldo **real de producción** en un clúster aparte
+(`erp-db-ensayo`) y se comprobó contra una tabla marcadora:
+
+| Momento | Hecho |
+|---|---|
+| 16:01:19 | respaldo base |
+| **16:19:38** | **se escriben 50 filas en `ensayo_restauracion`** |
+| 16:19:43 | el WAL con esas filas se archiva |
+| 16:2x | el clúster restaurado contiene **50 filas**, `max(creado)` idéntico al microsegundo |
+
+El marcador se escribió **18 minutos después** del respaldo base: no estaba en
+el volcado y solo pudo llegar por **replay de WAL**. Eso es lo que valida el
+PITR — un ensayo que solo restaure el respaldo base no distingue entre
+"recuperación a punto en el tiempo funciona" y "solo tengo copias diarias".
+
+**Cómo repetirlo sin romper producción:**
+
+> 🔒 El clúster de ensayo **no debe declarar `spec.plugins`**. Si lo hiciera,
+> archivaría WAL contra el MISMO `serverName` que producción y corrompería su
+> catálogo: el ensayo destruiría el respaldo que intenta validar. El plugin va
+> únicamente en `externalClusters`, que es solo lectura.
+
+> Fijar `imageName` igual al del origen. Restaurar sobre otra versión de
+> PostgreSQL puede migrar el catálogo y volver el ensayo no representativo.
+
+Tras el ensayo se verificó que producción quedó intacta: clúster sano,
+`failed_count` sin incrementos y catálogo de respaldos sin cambios.
 
 > ⚠️ **Producción no tiene monitoreo.** El fallo de archivado de hoy acumuló 102
 > errores durante ~45 minutos sin que nada avisara — se detectó por observación

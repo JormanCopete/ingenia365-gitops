@@ -1,0 +1,42 @@
+# Ensayo de restauracion de PostgreSQL de PRODUCCION.
+#
+# Restaura el respaldo real de produccion en un cluster APARTE y comprueba que
+# aparezca una tabla marcadora escrita DESPUES del respaldo base. Si aparece,
+# queda probado el camino completo: respaldo base + replay de WAL, que es lo que
+# sostiene el PITR.
+#
+# 🔒 SEGURIDAD DEL ENSAYO — deliberadamente NO se declara `spec.plugins`.
+# Si este cluster tuviera el plugin como archivador de WAL, escribiria en el
+# MISMO serverName que produccion y corromperia su catalogo. El plugin se
+# referencia solo en externalClusters, que es lectura del respaldo.
+#
+# La imagen se fija igual a la del origen (17.7): restaurar sobre una version
+# distinta de PostgreSQL puede migrar el catalogo y volver el ensayo no
+# representativo.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: erp-db-ensayo
+  namespace: erp-pdn
+  labels: { proposito: ensayo-restauracion }
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.7
+  # 5Gi alcanza de sobra: el respaldo base pesa 4,9 MiB. El origen tiene 20Gi
+  # porque esta dimensionado para crecer, no por el tamano actual.
+  storage:
+    size: 5Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { memory: 1Gi }
+  bootstrap:
+    recovery:
+      source: origen
+  externalClusters:
+    - name: origen
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: erp-pdn-store
+          # El serverName del ORIGEN: de aqui se lee el catalogo.
+          serverName: erp-db-pdn
