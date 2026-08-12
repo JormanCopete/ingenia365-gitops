@@ -1,80 +1,138 @@
-# Alertas de salud de respaldo.
+# Alertas de salud de los respaldos.
 #
-# ⚠️ TRAMPA IMPORTANTE: con el Barman Cloud Plugin, las metricas nativas de
-# CloudNativePG (cnpg_collector_last_available_backup_timestamp y compania)
-# quedan en CERO PERMANENTEMENTE — estan deprecadas desde 1.26 y solo funcionan
-# con el mecanismo in-tree. Un dashboard copiado de internet basado en ellas
-# reportaria "sin backups" para siempre, que es peor que no tener alerta.
-# Las metricas validas llevan el prefijo barman_cloud_cloudnative_pg_io_ y las
-# expone el mismo exportador que ya recogen nuestros PodMonitor.
+# Se evaluan en el Prometheus de nonprod, que es donde viven las reglas y
+# Alertmanager. Las metricas de PRODUCCION llegan por escritura remota desde el
+# agente de PDN y se distinguen por la etiqueta ambiente="pdn".
 #
-# Igual advertencia para .status.firstRecoverabilityPoint del Cluster: no se
-# rellena con plugins. La fuente de verdad es .status.serverRecoveryWindow del
-# ObjectStore.
+# ⚠️ TRAMPA VERIFICADA EN PRODUCCION (2026-08-12): con el Barman Cloud Plugin,
+# `cnpg_collector_last_available_backup_timestamp` vale CERO PERMANENTEMENTE —
+# esta deprecada y solo funciona con el mecanismo in-tree. Se comprobo con un
+# respaldo real ya completado: la metrica seguia en 0 y el estado del Cluster no
+# traia ningun campo de respaldo.
+#
+# Las metricas validas las expone el propio exportador en el puerto 9187 con
+# prefijo `barman_cloud_cloudnative_pg_io_` (verificadas con valores reales):
+#   ..._last_available_backup_timestamp   = 1786550495
+#   ..._last_failed_backup_timestamp      = 0
+#   ..._first_recoverability_point        = 1786550495
+#
+# Una regla escrita sobre la metrica deprecada no da error: dispara siempre (si
+# compara contra time()) o no dispara nunca (si ignora el cero). Las dos son
+# inutiles y ninguna se ve rota desde afuera.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: erp-backups-nonprod
+  name: erp-backups
   namespace: monitoring
   labels:
     release: monitoring        # debe coincidir con el ruleSelector de Prometheus
 spec:
   groups:
-    - name: erp.backup.postgres
+    - name: erp.respaldos.postgres
       rules:
-        - alert: BackupNoCompletado
+        - alert: RespaldoPostgresViejo
           expr: |
-            time() - max by (namespace) (
-              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=~"erp-(dev|qa)"}
+            time() - max by (ambiente, namespace) (
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{ambiente="pdn"}
             ) > 26 * 3600
           for: 15m
-          labels: { severity: warning, componente: backup }
+          labels: { severity: critical, componente: respaldo }
           annotations:
-            summary: "Sin backup completo de {{ $labels.namespace }} en mas de 26 h"
-            description: "Ultimo backup disponible hace {{ $value | humanizeDuration }}."
+            summary: "Sin respaldo completo de PostgreSQL en {{ $labels.namespace }} hace mas de 26 h"
+            description: "El respaldo diario corre a las 06:30 UTC. 26 h da margen para un retraso, no para dos dias sin copia."
 
-        - alert: BackupNuncaEjecutado
+        - alert: RespaldoPostgresNuncaEjecutado
           expr: |
-            max by (namespace) (
-              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=~"erp-(dev|qa)"}
+            max by (ambiente, namespace) (
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{ambiente="pdn"}
             ) == 0
           for: 1h
-          labels: { severity: warning, componente: backup }
+          labels: { severity: critical, componente: respaldo }
           annotations:
-            summary: "{{ $labels.namespace }} nunca completo un backup"
-            description: "Revisar ObjectStore, Secret s3-backup-creds y politica IAM del bucket."
+            summary: "PostgreSQL de {{ $labels.namespace }} nunca completo un respaldo"
+            description: "Revisar el ObjectStore, el Secret s3-backup-creds y la politica IAM del bucket."
 
-        - alert: UltimoBackupFallido
+        - alert: UltimoRespaldoPostgresFallido
           expr: |
-            max by (namespace) (barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{namespace=~"erp-(dev|qa)"})
-            > max by (namespace) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace=~"erp-(dev|qa)"})
+            max by (ambiente, namespace) (barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{ambiente="pdn"})
+            > max by (ambiente, namespace) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{ambiente="pdn"})
           for: 10m
-          labels: { severity: warning, componente: backup }
+          labels: { severity: critical, componente: respaldo }
           annotations:
-            summary: "El ultimo intento de backup de {{ $labels.namespace }} fallo"
-            description: "Revisar los logs del sidecar plugin-barman-cloud."
+            summary: "El ultimo intento de respaldo de {{ $labels.namespace }} fallo"
+            description: "Revisar los logs del contenedor plugin-barman-cloud del pod de PostgreSQL."
 
-    - name: erp.postgres.salud
+    - name: erp.respaldos.wal
       rules:
-        # El archivado de WAL detenido es MAS grave que un backup fallido: sin el
-        # no hay recuperacion a un punto en el tiempo, y pg_wal empieza a llenar
-        # el disco hasta tumbar la base.
-        - alert: ArchivadoWALDetenido
+        # El archivado de WAL detenido es MAS grave que un respaldo fallido: sin
+        # el no hay recuperacion a un punto en el tiempo, y pg_wal crece hasta
+        # llenar el disco y tumbar la base.
+        #
+        # Compara marcas de tiempo en vez de contar fallos: failed_count es
+        # acumulativo desde que arranco el servidor y nunca baja (hoy vale 102
+        # por un incidente ya resuelto). Lo que importa es si el ultimo intento
+        # fallido es POSTERIOR al ultimo exito.
+        - alert: ArchivadoWalFallando
           expr: |
-            cnpg_pg_stat_archiver_failed_count{namespace=~"erp-.*"} -
-            cnpg_pg_stat_archiver_failed_count{namespace=~"erp-.*"} offset 15m > 0
-          for: 15m
-          labels: { severity: critical, componente: backup }
-          annotations:
-            summary: "Fallos de archivado de WAL en {{ $labels.namespace }}"
-            description: "Sin archivado no hay PITR y pg_wal crece hasta llenar el disco."
-
-        - alert: DiscoPostgresCasiLleno
-          expr: |
-            (kubelet_volume_stats_available_bytes{namespace=~"erp-.*"} /
-             kubelet_volume_stats_capacity_bytes{namespace=~"erp-.*"}) < 0.15
+            cnpg_pg_stat_archiver_last_failed_time{ambiente="pdn"}
+            > cnpg_pg_stat_archiver_last_archived_time{ambiente="pdn"}
           for: 10m
-          labels: { severity: critical, componente: almacenamiento }
+          labels: { severity: critical, componente: respaldo }
           annotations:
-            summary: "Menos del 15% libre en {{ $labels.persistentvolumeclaim }}"
-            description: "PostgreSQL deja de aceptar escrituras si el disco se llena."
+            summary: "El archivado de WAL esta fallando en {{ $labels.namespace }}"
+            description: "Sin archivado no hay PITR. Causa frecuente: permisos del bucket (falto s3:PutObjectTagging el 2026-08-12)."
+
+        # Cuenta segmentos ESPERANDO a ser archivados, no tiempo transcurrido.
+        # Es la diferencia entre "el archivado esta trabado" y "la base esta
+        # ociosa y no genero WAL": una regla por tiempo daria falsos positivos
+        # en un ambiente sin trafico.
+        - alert: WalPendienteDeArchivar
+          expr: cnpg_collector_pg_wal_archive_status{ambiente="pdn", value="ready"} > 0
+          for: 15m
+          labels: { severity: critical, componente: respaldo }
+          annotations:
+            summary: "{{ $value }} segmentos de WAL sin archivar en {{ $labels.namespace }}"
+            description: "Se estan acumulando en pg_wal. Si no se drena, el disco se llena y PostgreSQL deja de aceptar escrituras."
+
+    - name: erp.respaldos.mongo
+      rules:
+        - alert: RespaldoMongoFallido
+          expr: kube_job_status_failed{ambiente="pdn", job_name=~"mongo-respaldo.*"} > 0
+          for: 5m
+          labels: { severity: critical, componente: respaldo }
+          annotations:
+            summary: "Fallo el respaldo de MongoDB en {{ $labels.namespace }}"
+            description: "Aqui vive la auditoria SARLAFT con retencion obligatoria de 5 anos. Revisar los logs del Job."
+
+        - alert: RespaldoMongoNoCorrio
+          expr: |
+            time() - max(kube_job_status_completion_time{ambiente="pdn", job_name=~"mongo-respaldo.*"}) > 26 * 3600
+          for: 30m
+          labels: { severity: critical, componente: respaldo }
+          annotations:
+            summary: "Sin respaldo de MongoDB en mas de 26 h"
+            description: "El CronJob corre a las 07:15 UTC. Verificar que no este suspendido."
+
+        # Un CronJob suspendido no falla: simplemente no corre, y ninguna alerta
+        # de fallo lo detecta. Es el modo de fallo mas silencioso posible.
+        - alert: RespaldoSuspendidoDemasiadoTiempo
+          expr: kube_cronjob_spec_suspend{ambiente="pdn", cronjob=~"mongo-respaldo.*"} == 1
+          for: 3d
+          labels: { severity: warning, componente: respaldo }
+          annotations:
+            summary: "El respaldo {{ $labels.cronjob }} lleva 3 dias suspendido"
+            description: "Se suspende a proposito mientras el ambiente no tiene datos. Si ya los tiene, hay que reactivarlo."
+
+    - name: erp.observabilidad
+      rules:
+        # INTERRUPTOR DE HOMBRE MUERTO. Todas las alertas anteriores dependen de
+        # que lleguen metricas de produccion. Si el agente muere o se corta el
+        # enlace, el silencio se interpretaria como que todo esta bien: sin esta
+        # regla, la caida del monitoreo apagaria el monitoreo sin avisar.
+        - alert: ProduccionDejoDeReportar
+          expr: absent(up{ambiente="pdn"} == 1)
+          for: 10m
+          labels: { severity: critical, componente: observabilidad }
+          annotations:
+            summary: "No llegan metricas de PRODUCCION"
+            description: "El agente de PDN o el enlace por la malla estan caidos. Mientras dure, NINGUNA alerta de produccion puede dispararse."
