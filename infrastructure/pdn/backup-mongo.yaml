@@ -24,16 +24,11 @@ metadata:
   namespace: erp-pdn
   labels: { app.kubernetes.io/name: mongo-backup, app.kubernetes.io/part-of: ingenia365erp }
 spec:
-  # SUSPENDIDO hasta que el ERP se despliegue en produccion: MongoDB todavia no
-  # existe en este ambiente y el Job fallaria cada madrugada, generando una
-  # alerta real por una condicion conocida. Un canal que avisa de problemas
-  # esperados enseña a ignorarlo, y entonces deja de servir para los de verdad.
-  #
-  # El olvido esta cubierto: la alerta RespaldoSuspendidoDemasiadoTiempo avisa
-  # si esto sigue suspendido a los 3 dias. Reactivar con:
-  #   k3s kubectl patch cronjob mongo-respaldo-diario -n erp-pdn \
-  #     --type=merge --patch '{"spec":{"suspend":false}}'
-  suspend: true
+  # ACTIVO desde el 2026-08-12, cuando el ERP se desplegó en produccion y
+  # MongoDB empezo a existir en este ambiente. Estuvo suspendido antes: el Job
+  # habria fallado cada madrugada por falta de base a la que conectarse,
+  # disparando una alerta real por una condicion conocida.
+  suspend: false
   # 07:15 UTC = 02:15 en Bogota. Despues del respaldo de PostgreSQL (06:30 UTC)
   # para no competir por I/O en un nodo unico.
   schedule: "15 7 * * *"
