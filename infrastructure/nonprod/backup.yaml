@@ -12,7 +12,7 @@ metadata:
 spec:
   retentionPolicy: "7d"
   configuration:
-    destinationPath: "s3://polly-carteravirtual-pdn/ingenia365-erp/pg/dev"
+    destinationPath: "s3://ingenia365-erp-backups/ingenia365-erp/pg/dev"
     s3Credentials:
       accessKeyId:     { name: s3-backup-creds, key: ACCESS_KEY_ID }
       secretAccessKey: { name: s3-backup-creds, key: ACCESS_SECRET_KEY }
@@ -47,7 +47,7 @@ metadata:
 spec:
   retentionPolicy: "14d"
   configuration:
-    destinationPath: "s3://polly-carteravirtual-pdn/ingenia365-erp/pg/qa"
+    destinationPath: "s3://ingenia365-erp-backups/ingenia365-erp/pg/qa"
     s3Credentials:
       accessKeyId:     { name: s3-backup-creds, key: ACCESS_KEY_ID }
       secretAccessKey: { name: s3-backup-creds, key: ACCESS_SECRET_KEY }

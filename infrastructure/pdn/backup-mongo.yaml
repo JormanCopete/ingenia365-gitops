@@ -87,12 +87,12 @@ spec:
                   FECHA=$(date -u +%F)
                   ANIOMES=$(date -u +%Y/%m)
                   aws s3 cp "/trabajo/audit-${FECHA}.archive.gz" \
-                    "s3://polly-carteravirtual-pdn/ingenia365-erp/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
+                    "s3://ingenia365-erp-backups/ingenia365-erp/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
                     --checksum-algorithm SHA256 --sse AES256
                   # Comprobacion explicita: que el objeto exista en destino, no
                   # que el comando haya salido con codigo 0.
                   aws s3api head-object \
-                    --bucket polly-carteravirtual-pdn \
+                    --bucket ingenia365-erp-backups \
                     --key "ingenia365-erp/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
                     --query 'ContentLength' --output text
               env:
@@ -122,10 +122,10 @@ metadata:
   namespace: erp-pdn
   labels: { app.kubernetes.io/name: mongo-archive, app.kubernetes.io/part-of: ingenia365erp }
 spec:
-  # SUSPENDIDO hasta que exista el bucket de archivo con Object Lock en modo
-  # COMPLIANCE (bucket distinto del operativo: ver docs/backups.md §5.3).
-  # Compliance no admite marcha atras NI para el dueno de la cuenta, asi que el
-  # bucket debe crearse a conciencia y probarse con retencion de 1 dia primero.
+  # SUSPENDIDO hasta hacer el piloto de Object Lock con retencion de 1 DIA sobre
+  # el prefijo de pruebas. Usa el MISMO bucket que el resto: al tener Object Lock
+  # habilitado, COMPLIANCE se aplica objeto por objeto. Compliance no admite
+  # marcha atras NI para el dueno de la cuenta: un error se paga durante 5 anos.
   suspend: true
   # Dia 2 de cada mes, 08:00 UTC: sella el mes ANTERIOR ya cerrado.
   schedule: "0 8 2 * *"
@@ -200,8 +200,8 @@ spec:
                   cd /trabajo
                   for F in *.gz SHA256SUMS MANIFIESTO.json; do
                     aws s3api put-object \
-                      --bucket ingenia365-erp-archive \
-                      --key "audit/${MES}/${F}" --body "$F" \
+                      --bucket ingenia365-erp-backups \
+                      --key "ingenia365-erp/audit/${MES}/${F}" --body "$F" \
                       --object-lock-mode COMPLIANCE \
                       --object-lock-retain-until-date "$HASTA" \
                       --checksum-algorithm SHA256 \
