@@ -97,23 +97,40 @@ spec:
           lifecycle:
             postStart:
               exec:
-                # Idempotente: si el replica set ya existe, no toca nada. Sale
-                # siempre con exito para no matar el contenedor — que la
-                # iniciacion funciono lo verifica la sonda de disponibilidad,
-                # que exige ser PRIMARY. Asi un fallo se nota, no se disimula.
+                # Idempotente: si el replica set ya existe, no toca nada.
+                #
+                # La salida va a /proc/1/fd/1, es decir, a la salida estandar de
+                # mongod: asi aparece en `kubectl logs`. La primera version
+                # mandaba todo a /dev/null y terminaba en `exit 0`, de modo que
+                # una iniciacion fallida se veia igual que no haber hecho nada.
+                # Un proceso de arranque que oculta su propio fallo cuesta mas
+                # de diagnosticar que uno que no existe.
+                #
+                # Sale siempre con exito para no matar el contenedor; que la
+                # iniciacion haya funcionado lo verifica la sonda de
+                # disponibilidad, que exige ser PRIMARY.
                 command:
                   - sh
                   - -c
                   - |
+                    exec >>/proc/1/fd/1 2>&1
+                    echo "[rs-init] esperando a que mongod acepte conexiones"
                     for i in $(seq 1 60); do
                       mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1 && break
                       sleep 2
                     done
+                    echo "[rs-init] estado del replica set:"
                     mongosh --quiet --eval '
-                      try { rs.status(); }
-                      catch (e) {
-                        rs.initiate({_id:"rs0",members:[{_id:0,host:"erp-mongo-0.erp-mongo:27017"}]});
-                      }' >/dev/null 2>&1
+                      try {
+                        var s = rs.status();
+                        print("[rs-init] ya iniciado: " + s.set + " estado=" + s.myState);
+                      } catch (e) {
+                        print("[rs-init] sin configurar (" + e.codeName + "), iniciando");
+                        printjson(rs.initiate({
+                          _id: "rs0",
+                          members: [{ _id: 0, host: "erp-mongo-0.erp-mongo:27017" }]
+                        }));
+                      }'
                     exit 0
           # OJO con timeoutSeconds: si no se declara, Kubernetes usa 1 SEGUNDO.
           # `mongosh` es una shell de Node y tarda varios segundos solo en
@@ -187,5 +204,15 @@ metadata:
   name: erp-mongo
 spec:
   clusterIP: None
+  # publishNotReadyAddresses ROMPE UN BLOQUEO CIRCULAR, no es una relajacion:
+  # rs.initiate() necesita resolver su propio nombre DNS (erp-mongo-0.erp-mongo),
+  # pero Kubernetes solo publica ese registro cuando el pod esta Ready; y estar
+  # Ready exige ser PRIMARY, que exige justamente la iniciacion. Sin esto el pod
+  # nunca arranca el replica set: verificado en DEV, el endpoint quedaba en
+  # notReadyAddresses y el nombre no resolvia.
+  #
+  # Es el patron estandar para bases de datos en StatefulSet. No expone nada de
+  # mas: el Service es headless y la NetworkPolicy sigue mandando.
+  publishNotReadyAddresses: true
   selector: { app.kubernetes.io/name: erp-mongo }
   ports: [{ name: mongo, port: 27017, targetPort: mongo }]
