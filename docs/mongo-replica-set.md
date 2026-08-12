@@ -88,6 +88,24 @@ standalone y nadie se enteró" en un fallo visible. El costo es que un MongoDB
 roto deja a la API fuera de servicio — que es el comportamiento correcto para un
 producto donde la auditoría es obligatoria, no opcional.
 
+## Ensayo verificado (2026-08-12, DEV)
+
+Ciclo completo probado con datos reales, no simulado:
+
+| Paso | Evidencia |
+|---|---|
+| Volcado consistente | `dumped 1 oplog entry` — sin replica set esta línea no existe |
+| Subida a S3 | `head-object` devolvió 10.726 bytes: se comprueba el objeto en destino, no el código de salida del `cp` |
+| Descarga desde S3 | 10,5 KiB recuperados |
+| Restauración | `132 document(s) restored successfully. 0 failed`, índices incluidos (entre ellos el TTL de 90 días de `accessLogs`) |
+| Comparación | original 132 = restaurado 132 |
+
+El ensayo restaura a `prueba_restauracion` con `--nsFrom/--nsTo` y borra esa base
+al terminar: es inocuo sobre los datos vivos y puede repetirse cuando se quiera.
+
+> Conviene repetirlo cada vez que cambie la versión de MongoDB o el formato del
+> volcado. Un respaldo que dejó de restaurarse hace un año es una suposición.
+
 ## Historial
 
 Esta configuración costó cinco iteraciones en DEV (2026-08-11/12). Las cuatro
