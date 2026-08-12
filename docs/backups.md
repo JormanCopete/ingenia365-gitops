@@ -2,6 +2,43 @@
 
 **Alcance:** clusters `erp-db` en `erp-pdn` (servidor de producción) y `erp-dev` / `erp-qa` (servidor no productivo). Bucket `ingenia365-erp-backups`, región `us-east-1`.
 
+## Estado verificado (2026-08-12)
+
+**PostgreSQL producción — operativo y comprobado contra S3:**
+
+| Comprobación | Resultado |
+|---|---|
+| `ContinuousArchiving` | `True` — "Continuous archiving is working" |
+| Archivado de WAL | `last_archived_time` posterior a `last_failed_time` |
+| Respaldo base | `base/20260812T160119/data.tar.gz` (4,9 MiB) + `backup.info` |
+| Marcador `.backup` | presente: ancla el respaldo a su punto en el WAL (habilita PITR) |
+| Etiquetas | `sistema`, `env=pdn`, `clasificacion=confidencial` |
+| Object Lock | `GOVERNANCE` hasta 2026-09-21 (los 40 días configurados) |
+| Cifrado | `AES256` |
+
+**MongoDB — ciclo completo ensayado en DEV**, incluida la restauración: ver
+[mongo-replica-set.md](mongo-replica-set.md).
+
+> ⚠️ **Falta el ensayo de restauración de PostgreSQL.** Que el respaldo exista y
+> esté bien etiquetado no prueba que sirva. Con MongoDB el ensayo de
+> restauración destapó dos defectos; con PostgreSQL esa prueba está pendiente.
+
+> ⚠️ **Producción no tiene monitoreo.** El fallo de archivado de hoy acumuló 102
+> errores durante ~45 minutos sin que nada avisara — se detectó por observación
+> directa. Prometheus corre en el servidor de nonprod y no vigila PDN. Con datos
+> reales encima, eso significa creer que hay PITR cuando no lo hay.
+
+### Lecciones del día de la puesta en marcha
+
+1. **`s3:PutObjectTagging` faltaba en la política IAM.** El `ObjectStore` declara
+   etiquetas y la política no permitía aplicarlas: cada WAL se subía y moría al
+   etiquetar. Dos piezas del mismo diseño que no se cruzaron.
+2. **`s3:PutBucketLifecycleConfiguration` no existe** — la acción real es
+   `s3:PutLifecycleConfiguration`. Estaba en un bloque `Deny`, donde una acción
+   inexistente no deniega nada: un hueco silencioso si AWS la hubiera aceptado.
+3. **Object Lock no se puede habilitar en un bucket existente.** Por eso se creó
+   uno dedicado en vez de reutilizar `polly-carteravirtual-pdn`.
+
 ## Decisiones que gobiernan todos los manifiestos
 
 | # | Decisión | Valor | Por qué |
