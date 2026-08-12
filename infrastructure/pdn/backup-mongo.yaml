@@ -87,13 +87,13 @@ spec:
                   FECHA=$(date -u +%F)
                   ANIOMES=$(date -u +%Y/%m)
                   aws s3 cp "/trabajo/audit-${FECHA}.archive.gz" \
-                    "s3://ingenia365-erp-backups/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
+                    "s3://polly-carteravirtual-pdn/ingenia365-erp/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
                     --checksum-algorithm SHA256 --sse AES256
                   # Comprobacion explicita: que el objeto exista en destino, no
                   # que el comando haya salido con codigo 0.
                   aws s3api head-object \
-                    --bucket ingenia365-erp-backups \
-                    --key "mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
+                    --bucket polly-carteravirtual-pdn \
+                    --key "ingenia365-erp/mongo/diario/${ANIOMES}/audit-${FECHA}.archive.gz" \
                     --query 'ContentLength' --output text
               env:
                 - name: HOME

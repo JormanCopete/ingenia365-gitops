@@ -16,7 +16,7 @@ spec:
   # 35d = un ciclo contable mensual completo + 5 dias de margen de deteccion.
   retentionPolicy: "35d"
   configuration:
-    destinationPath: "s3://ingenia365-erp-backups/erp/pdn"
+    destinationPath: "s3://polly-carteravirtual-pdn/ingenia365-erp/pg/pdn"
     # endpointURL se OMITE para AWS S3 nativo.
     # Al migrar a MinIO: endpointURL: "https://minio.interno:9000"
     s3Credentials:

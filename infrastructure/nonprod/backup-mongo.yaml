@@ -69,10 +69,10 @@ spec:
                   set -e
                   FECHA=$(date -u +%F)
                   aws s3 cp "/trabajo/audit-${FECHA}.archive.gz" \
-                    "s3://ingenia365-erp-backups/mongo/dev/${FECHA}.archive.gz" \
+                    "s3://polly-carteravirtual-pdn/ingenia365-erp/mongo/dev/${FECHA}.archive.gz" \
                     --checksum-algorithm SHA256 --sse AES256
-                  aws s3api head-object --bucket ingenia365-erp-backups \
-                    --key "mongo/dev/${FECHA}.archive.gz" \
+                  aws s3api head-object --bucket polly-carteravirtual-pdn \
+                    --key "ingenia365-erp/mongo/dev/${FECHA}.archive.gz" \
                     --query 'ContentLength' --output text
               env:
                 - name: HOME
