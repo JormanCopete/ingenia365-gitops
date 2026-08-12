@@ -80,6 +80,46 @@ spec:
       labels: { app.kubernetes.io/name: erp-mongo }
     spec:
       securityContext: { runAsNonRoot: true, runAsUser: 999, fsGroup: 999 }
+      initContainers:
+        # LA RAIZ DE TODO EL PROBLEMA: mongod resuelve el nombre de su miembro
+        # del replica set AL ARRANCAR y decide ahi si se reconoce. No lo
+        # reevalua nunca mas. Al recrear el pod cambia su IP, y CoreDNS puede
+        # seguir devolviendo la anterior hasta 30 s por su cache; mongod arranca
+        # en ~2 s, concluye "no soy miembro" y queda con
+        # InvalidReplicaSetConfig de forma permanente, sin oplog y sin respaldo
+        # posible. Reparar eso exige un rs.reconfig({force:true}) a mano.
+        #
+        # Esperar aca saca al DNS del camino critico: mongod no arranca hasta
+        # que su propio nombre apunta a este pod.
+        - name: esperar-dns
+          image: mongo:7
+          env:
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+          command:
+            - sh
+            - -c
+            - |
+              for i in $(seq 1 90); do
+                IP=$(getent hosts erp-mongo-0.erp-mongo 2>/dev/null | awk '{print $1}' | head -1)
+                if [ "$IP" = "$POD_IP" ]; then
+                  echo "[esperar-dns] correcto tras $((i*2))s: $IP"
+                  exit 0
+                fi
+                [ $((i % 15)) -eq 0 ] && echo "[esperar-dns] ${i}: devuelve '$IP', se espera '$POD_IP'"
+                sleep 2
+              done
+              # Fallar es lo correcto: kubelet reintenta el init y el pod queda
+              # en Init, estado recuperable. Arrancar mongod con el DNS mal
+              # deja una base rota que solo se repara a mano.
+              echo "[esperar-dns] el DNS no convergio en 180s"
+              exit 1
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits:   { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
       containers:
         - name: mongo
           image: mongo:7
