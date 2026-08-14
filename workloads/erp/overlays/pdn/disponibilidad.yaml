@@ -32,7 +32,21 @@ spec:
   hard:
     requests.cpu: "3"
     requests.memory: 5Gi
-    limits.memory: 8Gi
+    # 8Gi BLOQUEABA TODA ACTUALIZACION SIN CORTE, y de la peor forma posible.
+    #
+    # La estrategia maxUnavailable:0 / maxSurge:1 levanta un pod ADICIONAL antes
+    # de bajar el viejo. Con 7552Mi usados de 8Gi quedaban 640Mi y el pod nuevo
+    # pide 768Mi de limite: la ReplicaSet nueva no podia crear un solo pod.
+    #
+    # El sintoma es traicionero: Argo reporta "Synced", el Deployment queda
+    # "Progressing" y los pods VIEJOS siguen sirviendo. Recien se nota al vencer
+    # el plazo de progreso, diez minutos despues, en un log que nadie mira. Asi
+    # es como la correccion de la Web quedo publicada sin llegar a produccion.
+    #
+    # 10Gi deja margen para el excedente de API y Web a la vez. No compromete al
+    # nodo: Kubernetes programa por REQUESTS (3632Mi de ~10Gi asignables, 40%) y
+    # los limites son un tope, no una reserva.
+    limits.memory: 10Gi
     persistentvolumeclaims: "10"
 ---
 # Todo contenedor sin limites explicitos recibe estos: un pod mal configurado
