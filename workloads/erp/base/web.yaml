@@ -27,7 +27,9 @@ spec:
       containers:
         - name: web
           image: ghcr.io/jormancopete/ingenia365erp/web:develop
-          imagePullPolicy: IfNotPresent
+          # Ver la nota extensa en api.yaml: con etiqueta movil, IfNotPresent
+          # deja corriendo indefinidamente una imagen vieja aunque se republique.
+          imagePullPolicy: Always
           ports:
             - { name: http, containerPort: 8080 }
           envFrom:
