@@ -1,0 +1,56 @@
+# Conecta los clusteres de DEV y QA al plugin de respaldo.
+#
+# ⚠️ PROVOCA UN REINICIO DE POSTGRESQL en el ambiente correspondiente: el plugin
+# inyecta un contenedor sidecar y el pod debe recrearse. Con instances:1 es un
+# corte real, aceptable en no productivo.
+#
+# 🔴 serverName DISTINTO POR AMBIENTE, y no es cosmetico: los tres clusteres se
+# llaman "erp-db". Sin este nombre explicito, DEV, QA y PRODUCCION escribirian en
+# el MISMO catalogo de Barman dentro de S3 y se pisarian los respaldos entre si.
+# Un respaldo de produccion sobrescrito por uno de DEV se descubre el dia que hay
+# que restaurar.
+#
+# Aplicar (el JSON va por STDIN: PowerShell le quita las comillas dobles a los
+# argumentos de comandos nativos y kubectl recibe JSON invalido):
+#
+#   DEV:
+#     echo '{"spec":{"plugins":[{"name":"barman-cloud.cloudnative-pg.io","enabled":true,"isWALArchiver":true,"parameters":{"barmanObjectName":"erp-dev-store","serverName":"erp-db-dev"}}],"postgresql":{"parameters":{"archive_timeout":"300s","wal_compression":"lz4"}}}}' \
+#       | k3s kubectl patch cluster erp-db -n erp-dev --type=merge --patch-file=/dev/stdin
+#
+#   QA:
+#     echo '{"spec":{"plugins":[{"name":"barman-cloud.cloudnative-pg.io","enabled":true,"isWALArchiver":true,"parameters":{"barmanObjectName":"erp-qa-store","serverName":"erp-db-qa"}}],"postgresql":{"parameters":{"archive_timeout":"300s","wal_compression":"lz4"}}}}' \
+#       | k3s kubectl patch cluster erp-db -n erp-qa --type=merge --patch-file=/dev/stdin
+#
+# Verificar ANTES que no exista .spec.backup.barmanObjectStore: el mecanismo
+# viejo no puede coexistir con el plugin.
+#
+# archive_timeout 300s tambien en no productivo: si aqui se comporta distinto que
+# en produccion, deja de servir como ensayo de lo que va a pasar alla.
+---
+# Referencia declarativa del contenido de ambos parches.
+dev:
+  spec:
+    plugins:
+      - name: barman-cloud.cloudnative-pg.io
+        enabled: true
+        isWALArchiver: true
+        parameters:
+          barmanObjectName: erp-dev-store
+          serverName: erp-db-dev
+    postgresql:
+      parameters:
+        archive_timeout: "300s"
+        wal_compression: "lz4"
+qa:
+  spec:
+    plugins:
+      - name: barman-cloud.cloudnative-pg.io
+        enabled: true
+        isWALArchiver: true
+        parameters:
+          barmanObjectName: erp-qa-store
+          serverName: erp-db-qa
+    postgresql:
+      parameters:
+        archive_timeout: "300s"
+        wal_compression: "lz4"
