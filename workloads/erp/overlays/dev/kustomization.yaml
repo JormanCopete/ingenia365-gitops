@@ -15,8 +15,13 @@ configMapGenerator:
       - Database__AutoMigrate=true
       - Database__Seed__RunParametricSeed=true
       - Database__Seed__RunTestSeed=true
-      - EmailSender__InvitationLinkBaseUrl=https://app-dev.ingenia365.com
-      - EmailSender__PasswordResetLinkBaseUrl=https://app-dev.ingenia365.com
+      # Ver la nota del overlay de QA: EmailSender__* no lo leia nadie.
+      - IdentityEmail__BaseUrl=https://app-dev.ingenia365.com
+      # Sin estas dos la API no arranca (ValidateOnStart, sin valor por defecto).
+      # El dominio raiz sirve para los tres ambientes; una passkey inscrita en
+      # DEV igual no vale en QA ni en PDN, eso lo separa el navegador.
+      - WebAuthn__RelyingPartyId=ingenia365.com
+      - WebAuthn__OrigenesPermitidos__0=https://app-dev.ingenia365.com
       - Serilog__MinimumLevel__Default=Debug
 
 images:
@@ -37,3 +42,13 @@ patches:
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
         value: 5Gi
+  # Ver la nota del overlay de QA: DEV y QA comparten el Traefik de nonprod y
+  # sin Host() las rutas se pisan entre namespaces.
+  - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: erp }
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`app-dev.ingenia365.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/hubs`) || PathPrefix(`/swagger`))
+      - op: replace
+        path: /spec/routes/1/match
+        value: Host(`app-dev.ingenia365.com`) && PathPrefix(`/`)

@@ -29,10 +29,62 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         seccompProfile: { type: RuntimeDefault }
+      # DOS PASOS, y no "--scope all", que es lo que habia aqui.
+      #
+      # "all" hace tres cosas: base administrativa, base operativa, y despues
+      # recorre las cooperativas llamando a TenantSchemaService — un esquema por
+      # cooperativa DENTRO de la base operativa. Ese es el modelo ANTERIOR: el
+      # vivo es una base por cooperativa (Principio IV, el aislamiento es
+      # fisico). Con cooperativas registradas habria creado sus ~289 tablas como
+      # esquemas dentro de la plantilla, y eso se descubre semanas despues.
+      #
+      # Hoy no ha hecho dano porque produccion tiene CERO cooperativas
+      # (verificado). Era una mina para la primera que se registre.
+      #
+      # El migrador ya se niega a hacerlo (sale con codigo 2 y
+      # [Migrator.ModeloDeAislamiento]), pero eso abortaria la sincronizacion:
+      # mejor invocarlo bien.
+      #
+      # PENDIENTE, y conviene que este escrito: las bases de cada cooperativa no
+      # las migra NADIE en produccion. La API si lo hace, pero solo con
+      # AutoMigrate=true, y aqui esta en false a proposito. Hace falta un paso
+      # por cooperativa apuntando la cadena operativa a SU base. Con cero
+      # cooperativas no urge; con la primera, si.
+      initContainers:
+        # 1) Base administrativa. Aqui viaja el traslado de secretos MFA.
+        - name: migrator-admin
+          image: ghcr.io/jormancopete/ingenia365erp/migrator:release
+          args: ["migrate", "--scope", "admin"]
+          # Mismo bloque que el contenedor principal. Las credenciales salen del
+          # Secret que genera CloudNativePG, asi que no pueden venir de un
+          # ConfigMap compartido; duplicarlo es el precio de no inventar una
+          # indireccion.
+          env:
+            - name: DOTNET_ENVIRONMENT
+              value: Production
+            - name: Database__Provider
+              value: PostgreSQL
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: erp-db-app, key: username } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: erp-db-app, key: password } }
+            - name: Database__ConnectionStrings__PostgreSQL
+              value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+            - name: Database__AdminConnectionStrings__PostgreSQL
+              value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp_admin;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
       containers:
+        # 2) Base operativa (la plantilla). El --tenant con un identificador que
+        #    no existe neutraliza el bucle de cooperativas: el filtro salta toda
+        #    cooperativa que no coincida, y ninguna se llama asi.
         - name: migrator
           image: ghcr.io/jormancopete/ingenia365erp/migrator:release
-          args: ["migrate", "--scope", "all"]
+          args: ["migrate", "--scope", "tenants", "--tenant", "__ninguna__"]
           env:
             - name: DOTNET_ENVIRONMENT
               value: Production

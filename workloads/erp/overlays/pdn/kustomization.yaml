@@ -17,8 +17,14 @@ configMapGenerator:
       - Database__AutoMigrate=false
       - Database__Seed__RunParametricSeed=true
       - Database__Seed__RunTestSeed=false
-      - EmailSender__InvitationLinkBaseUrl=https://app.ingenia365.com
-      - EmailSender__PasswordResetLinkBaseUrl=https://app.ingenia365.com
+      # Ver la nota del overlay de QA: las dos claves EmailSender__* que habia
+      # aqui no las leia ningun codigo. Es lo que hacia que los enlaces de las
+      # invitaciones y del restablecimiento de contrasena de PRODUCCION
+      # apuntaran a https://localhost:7200 desde siempre.
+      - IdentityEmail__BaseUrl=https://app.ingenia365.com
+      # Sin estas dos la API no arranca (ValidateOnStart, sin valor por defecto).
+      - WebAuthn__RelyingPartyId=ingenia365.com
+      - WebAuthn__OrigenesPermitidos__0=https://app.ingenia365.com
       - Serilog__MinimumLevel__Default=Information
 
 images:

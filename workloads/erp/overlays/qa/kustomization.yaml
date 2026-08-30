@@ -15,8 +15,18 @@ configMapGenerator:
       - Database__AutoMigrate=true
       - Database__Seed__RunParametricSeed=true
       - Database__Seed__RunTestSeed=true
-      - EmailSender__InvitationLinkBaseUrl=https://app-qa.ingenia365.com
-      - EmailSender__PasswordResetLinkBaseUrl=https://app-qa.ingenia365.com
+      # Las dos claves EmailSender__* que habia aqui NO las leia ningun codigo:
+      # la seccion se llama IdentityEmail (IdentityEmailOptions.SectionName), y
+      # sin ella regia el valor cableado https://localhost:7200. O sea que TODOS
+      # los enlaces de TODOS los correos apuntaban a localhost.
+      - IdentityEmail__BaseUrl=https://app-qa.ingenia365.com
+      # Obligatorias desde el rediseno del segundo factor: WebAuthnOptions se
+      # valida con ValidateOnStart y NO tiene valores por defecto, asi que sin
+      # estas dos el proceso muere al arrancar y el rollout queda colgado.
+      # RelyingPartyId es el dominio RAIZ y vale para los tres ambientes.
+      # CAMBIARLO invalida todas las passkeys ya inscritas, sin migracion.
+      - WebAuthn__RelyingPartyId=ingenia365.com
+      - WebAuthn__OrigenesPermitidos__0=https://app-qa.ingenia365.com
 
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
@@ -30,3 +40,16 @@ patches:
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
         value: 5Gi
+  # El IngressRoute de base no filtra por Host, y en PDN no hace falta: a ese
+  # Traefik solo le llega un hostname. Aqui NO: DEV y QA comparten el Traefik
+  # de nonprod, asi que dos rutas PathPrefix(`/`) con la misma prioridad se
+  # pisan y todo el trafico de los DOS hostnames acaba en un solo namespace.
+  # Sin Host() el sintoma es que uno de los dos ambientes sirve al otro.
+  - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: erp }
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`app-qa.ingenia365.com`) && (PathPrefix(`/api`) || PathPrefix(`/health`) || PathPrefix(`/hubs`) || PathPrefix(`/swagger`))
+      - op: replace
+        path: /spec/routes/1/match
+        value: Host(`app-qa.ingenia365.com`) && PathPrefix(`/`)
