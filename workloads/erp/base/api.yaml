@@ -79,6 +79,14 @@ spec:
               valueFrom: { secretKeyRef: { name: erp-master-admin, key: email, optional: true } }
             - name: MASTER_ADMIN_PASSWORD
               valueFrom: { secretKeyRef: { name: erp-master-admin, key: password, optional: true } }
+            # --- Correo saliente: credenciales del relay ---
+            # optional: un ambiente sin el Secret arranca igual; el envio falla
+            # de forma visible en vez de tumbar el proceso. SmtpEmailSender solo
+            # autentica si Username no esta vacio.
+            - name: Smtp__Username
+              valueFrom: { secretKeyRef: { name: erp-smtp, key: username, optional: true } }
+            - name: Smtp__Password
+              valueFrom: { secretKeyRef: { name: erp-smtp, key: password, optional: true } }
           volumeMounts:
             - { name: jwt-keys, mountPath: /keys, readOnly: true }
             - { name: attachments, mountPath: /app/storage/attachments }

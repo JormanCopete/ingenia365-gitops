@@ -27,6 +27,24 @@ configMapGenerator:
       # CAMBIARLO invalida todas las passkeys ya inscritas, sin migracion.
       - WebAuthn__RelyingPartyId=ingenia365.com
       - WebAuthn__OrigenesPermitidos__0=https://app-qa.ingenia365.com
+      # Correo saliente. Sin esto NADA que dependa del correo funciona en QA:
+      # ni la invitacion del primer administrador al registrar una cooperativa
+      # (el token viaja solo en el correo; en la base queda el hash, asi que
+      # si no sale se pierde), ni el restablecimiento de contrasena, ni la
+      # recuperacion del segundo factor. Antes no habia ninguna clave Smtp__ y
+      # regia localhost:25, o sea que todo fallaba en silencio.
+      # Usuario y contrasena NO van aqui: van en el Secret erp-smtp (ver
+      # tools/scripts/crear-secreto-smtp.ps1 en el repo del ERP).
+      - Smtp__Host=mail.notifica365.com
+      - Smtp__Port=587
+      - Smtp__UseStartTls=true
+      - Smtp__FromAddress=noresponder.ingenia365erp@notifica365.com
+      - Smtp__FromName=No Responder IngenIA365 ERP
+      # PARCHE, no secreto: es el hash publico del certificado autofirmado de
+      # fabrica de Poste.io que presenta mail.notifica365.com. Sin fijarlo,
+      # MailKit rechaza la conexion. Cuando el servidor tenga un certificado
+      # valido, borrar esta linea.
+      - Smtp__HuellaCertificadoAceptada=54EA10957D7018ADE475CA084C1CADD14030D460CD6EED62F7CEDCDA15974E1C
 
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
