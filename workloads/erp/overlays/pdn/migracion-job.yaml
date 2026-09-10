@@ -11,28 +11,31 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  # generateName y NO name, y sin hook-delete-policy: BeforeHookCreation.
-  #
-  # Con nombre fijo y BeforeHookCreation, Argo CD 3.5.0 tiene que borrar el Job
-  # de la sincronizacion anterior antes de crear el nuevo, y mientras ese Job
-  # exista (lo conservamos 24 h por ttlSecondsAfterFinished) la operacion pasa a
-  # "waiting for deletion of hook batch/Job/erp-db-migrate" y en el mismo
-  # segundo termina Succeeded SIN ejecutar el hook ni aplicar nada. Visto tres
-  # veces el 2026-09-10 en produccion (18:17, 21:07): la primera sincronizacion
-  # tras otra reciente no desplegaba, la segunda si. La primera del dia (16:03)
-  # funcionaba porque el Job del dia anterior ya habia vencido su TTL.
-  #
-  # Con generateName cada sincronizacion crea un Job con nombre propio, no hay
-  # nada que borrar antes, y los anteriores se van solos a las 24 h. Para leer
-  # los logs: kubectl -n erp-pdn logs -l app.kubernetes.io/name=erp-db-migrate
-  #
-  # El name fijo sigue porque kustomize lo exige para acumular el recurso
-  # ("missing metadata.name"); Argo CD, al ver generateName en un hook, acuña el
-  # nombre unico (generateName + revision + fase + marca de tiempo) y no usa este.
   name: erp-db-migrate
-  generateName: erp-db-migrate-
   annotations:
     argocd.argoproj.io/hook: PreSync
+    # HookSucceeded, y NO BeforeHookCreation (que es tambien la politica por
+    # defecto si no se declara ninguna).
+    #
+    # Con BeforeHookCreation, Argo CD 3.5.0 tiene que borrar el Job de la
+    # sincronizacion anterior antes de crear el nuevo, y mientras ese Job exista
+    # la operacion pasa a "waiting for deletion of hook batch/Job/erp-db-migrate"
+    # y en el mismo segundo termina Succeeded SIN ejecutar el hook ni aplicar
+    # nada. Visto tres veces el 2026-09-10 en produccion (18:17, 21:07, 22:17):
+    # la primera sincronizacion tras otra reciente no desplegaba, la segunda si;
+    # la primera del dia (16:03) funcionaba porque el Job anterior ya habia
+    # vencido su TTL de 24 h.
+    #
+    # generateName no sirve aqui: kustomize exige metadata.name, y con name
+    # presente Argo ignora generateName (comprobado a las 22:17).
+    #
+    # Con HookSucceeded el Job se borra al terminar bien, asi que la siguiente
+    # sincronizacion nunca encuentra uno viejo que borrar. Se pierden los logs
+    # del exito (lo que aplico queda en __EFMigrationsHistory de cada base). Si
+    # el Job FALLA se queda, con sus logs, hasta el TTL: y antes de volver a
+    # sincronizar hay que borrarlo a mano, porque con el mismo nombre Argo no lo
+    # reemplaza:  k3s kubectl -n erp-pdn delete job erp-db-migrate
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
   backoffLimit: 2
   ttlSecondsAfterFinished: 86400   # conserva los logs 24 h para diagnostico; tambien limpia los Jobs viejos
