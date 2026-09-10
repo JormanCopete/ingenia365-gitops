@@ -27,8 +27,7 @@ spec:
       containers:
         - name: web
           image: ghcr.io/jormancopete/ingenia365erp/web:develop
-          # Ver la nota extensa en api.yaml: con etiqueta movil, IfNotPresent
-          # deja corriendo indefinidamente una imagen vieja aunque se republique.
+          # Ver la nota en api.yaml: los overlays fijan el digest; Always queda de red.
           imagePullPolicy: Always
           ports:
             - { name: http, containerPort: 8080 }

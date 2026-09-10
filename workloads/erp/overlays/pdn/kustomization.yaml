@@ -27,13 +27,26 @@ configMapGenerator:
       - WebAuthn__OrigenesPermitidos__0=https://app.ingenia365.com
       - Serilog__MinimumLevel__Default=Information
 
+# Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
+#
+# Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
+# de .github/workflows/ci.yml) cada vez que publica imagenes desde la rama que
+# alimenta este ambiente. No editarlas a mano salvo para volver a una version
+# anterior: cambiar el digest ES el despliegue, y Argo CD lo ve como un cambio
+# real del manifiesto, que es lo que la etiqueta movil nunca fue.
+#
+# Con la etiqueta (:develop, :release) pasaba esto: se republicaba la imagen, el
+# manifiesto no cambiaba, Argo decia Synced y los pods seguian con la imagen
+# vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
+# En produccion el CI solo deja el commit: la sincronizacion sigue siendo manual
+# en Argo CD, y el digest en el commit es lo que se aprueba.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    newTag: release
+    digest: sha256:46c05647ec0dcac42527dea35755af850ce029fd56147dadf45449ba2899ea5e
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    newTag: release
+    digest: sha256:b10f1c3f65a0bc78759ff8e4f4886adbfc82663b2612e08a70439215bac2d48f
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
-    newTag: release
+    digest: sha256:84886eb9512da639e8217eb13e00f9cfde65fbab90f2f3fb2508844486ca02b7
 
 patches:
   # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.

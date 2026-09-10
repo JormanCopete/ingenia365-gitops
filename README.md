@@ -30,8 +30,20 @@ docs/                        runbooks
 | **QA** | merge a `main` | Automática, sin `selfHeal` (permite congelar durante certificación) |
 | **PDN** | merge a `main` | **Manual**: alguien aprueba en Argo CD. El control de cambios que exige un producto regulado |
 
-El flujo completo: código → CI construye y publica a GHCR → se actualiza la
-etiqueta de imagen en este repo → Argo CD sincroniza.
+El flujo completo: código → el CI del repositorio de la aplicación construye,
+publica a GHCR y **escribe el digest de cada imagen en el overlay del ambiente
+de este repo** (job `gitops` de `.github/workflows/ci.yml`; `develop` → `dev` y
+`qa`, `release` → `pdn`) → Argo CD sincroniza (solo en DEV y QA, con aprobación
+en PDN).
+
+**Se despliega por digest, no por etiqueta**, desde el 2026-09-10. Un digest es
+inmutable: cambiarlo es un cambio real del manifiesto, Kubernetes rota los pods
+solo y el commit deja escrito qué artefacto corre en cada ambiente. Con la
+etiqueta móvil (`:release`) republicar no cambiaba nada, Argo decía `Synced` y
+los pods seguían con la imagen anterior hasta un `rollout restart` a mano —pasó
+tres veces en producción—. Para volver a una versión anterior basta revertir el
+commit del digest. El CI empuja con el secreto `GITOPS_TOKEN` del repositorio de
+la aplicación (un token de acceso con permiso de contenido sobre este repo).
 
 ## Decisiones que conviene entender antes de tocar
 

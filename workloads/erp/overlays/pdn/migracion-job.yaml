@@ -53,11 +53,7 @@ spec:
       initContainers:
         # 1) Base administrativa. Aqui viaja el traslado de secretos MFA.
         - name: migrator-admin
-          image: ghcr.io/jormancopete/ingenia365erp/migrator:release
-          # Always y no el IfNotPresent implicito: :release es etiqueta MOVIL y el nodo
-          # conserva la copia anterior. Con IfNotPresent el Job correria el migrador
-          # viejo, diria "sin pendientes" y la API nueva moriria con MigrationsPending.
-          # Mismo motivo que en base/api.yaml.
+          image: ghcr.io/jormancopete/ingenia365erp/migrator:release   # el overlay fija el digest
           imagePullPolicy: Always
           args: ["migrate", "--scope", "admin"]
           # Mismo bloque que el contenedor principal. Las credenciales salen del
@@ -88,11 +84,7 @@ spec:
         #    no existe neutraliza el bucle de cooperativas: el filtro salta toda
         #    cooperativa que no coincida, y ninguna se llama asi.
         - name: migrator
-          image: ghcr.io/jormancopete/ingenia365erp/migrator:release
-          # Always y no el IfNotPresent implicito: :release es etiqueta MOVIL y el nodo
-          # conserva la copia anterior. Con IfNotPresent el Job correria el migrador
-          # viejo, diria "sin pendientes" y la API nueva moriria con MigrationsPending.
-          # Mismo motivo que en base/api.yaml.
+          image: ghcr.io/jormancopete/ingenia365erp/migrator:release   # el overlay fija el digest
           imagePullPolicy: Always
           args: ["migrate", "--scope", "tenants", "--tenant", "__ninguna__"]
           env:

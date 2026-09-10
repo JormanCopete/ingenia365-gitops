@@ -26,19 +26,14 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: api
-          image: ghcr.io/jormancopete/ingenia365erp/api:develop   # el overlay fija el digest
-          # Always y no IfNotPresent: los overlays despliegan por ETIQUETA MOVIL
-          # (:release, :develop). Republicar la etiqueta no cambia el manifiesto,
-          # asi que Kubernetes no ve diferencia y no rota los pods; y con
-          # IfNotPresent, aunque se los reinicie a mano, reutilizan la copia en
-          # cache. Medido en produccion: tras publicar la correccion de la Web,
-          # Argo reporto todo "Synced" y los pods seguian con la imagen de hacia
-          # 41 horas.
-          #
-          # PENDIENTE ESTRUCTURAL: fijar el DIGEST en el overlay de produccion.
-          # Es lo unico que hace el despliegue reproducible y auditable — se
-          # sabe exactamente que artefacto corre. Always garantiza que la imagen
-          # coincida con la etiqueta, pero no cual etiqueta se desplego.
+          image: ghcr.io/jormancopete/ingenia365erp/api:develop   # el overlay fija el DIGEST
+          # Desde el 2026-09-10 los overlays despliegan por DIGEST (lo escribe el
+          # CI de la aplicacion): un digest es inmutable, asi que cambiarlo es un
+          # cambio real del manifiesto y Kubernetes rota los pods solo. Con la
+          # etiqueta movil de antes (:release, :develop) no pasaba: republicar la
+          # etiqueta no cambiaba nada, Argo decia Synced y los pods seguian con
+          # la imagen de 41 horas antes. Always se conserva como red por si algun
+          # overlay volviera a una etiqueta.
           imagePullPolicy: Always
           ports:
             - { name: http, containerPort: 8080 }
