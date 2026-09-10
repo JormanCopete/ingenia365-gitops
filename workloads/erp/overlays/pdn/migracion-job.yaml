@@ -25,6 +25,11 @@ metadata:
   # Con generateName cada sincronizacion crea un Job con nombre propio, no hay
   # nada que borrar antes, y los anteriores se van solos a las 24 h. Para leer
   # los logs: kubectl -n erp-pdn logs -l app.kubernetes.io/name=erp-db-migrate
+  #
+  # El name fijo sigue porque kustomize lo exige para acumular el recurso
+  # ("missing metadata.name"); Argo CD, al ver generateName en un hook, acuña el
+  # nombre unico (generateName + revision + fase + marca de tiempo) y no usa este.
+  name: erp-db-migrate
   generateName: erp-db-migrate-
   annotations:
     argocd.argoproj.io/hook: PreSync
