@@ -1,12 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: erp-pdn
 resources:
   - ../../base
   - migracion-job.yaml
   - disponibilidad.yaml
-
 # PRODUCCION: no se auto-migra (fail-fast si hay pendientes) y no lleva datos
 # demo. El esquema lo aplica el Job PreSync antes de rotar los pods.
 configMapGenerator:
@@ -26,7 +24,6 @@ configMapGenerator:
       - WebAuthn__RelyingPartyId=ingenia365.com
       - WebAuthn__OrigenesPermitidos__0=https://app.ingenia365.com
       - Serilog__MinimumLevel__Default=Information
-
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
@@ -42,21 +39,20 @@ configMapGenerator:
 # en Argo CD, y el digest en el commit es lo que se aprueba.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:46c05647ec0dcac42527dea35755af850ce029fd56147dadf45449ba2899ea5e
+    digest: sha256:9a17c881bfdd7d518575a9721061598508115f6d9eef04513dbdc722dd9a6c14
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:b10f1c3f65a0bc78759ff8e4f4886adbfc82663b2612e08a70439215bac2d48f
+    digest: sha256:6c830f39590fb7ae124e4964029357ffe4efeb0d4326a67707ca67d110fedca7
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
-    digest: sha256:84886eb9512da639e8217eb13e00f9cfde65fbab90f2f3fb2508844486ca02b7
-
+    digest: sha256:293121a54b62e51d0411871327cf925e00ff99ba11aaf1f411a570157dfa8577
 patches:
   # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.
   # (La Web no tiene circuitos Blazor Server, asi que no necesita afinidad.)
-  - target: { kind: Deployment, name: erp-api }
+  - target: {kind: Deployment, name: erp-api}
     patch: |-
       - op: replace
         path: /spec/replicas
         value: 2
-  - target: { kind: Deployment, name: erp-web }
+  - target: {kind: Deployment, name: erp-web}
     patch: |-
       - op: replace
         path: /spec/replicas
