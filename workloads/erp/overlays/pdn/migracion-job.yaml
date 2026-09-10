@@ -11,13 +11,26 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: erp-db-migrate
+  # generateName y NO name, y sin hook-delete-policy: BeforeHookCreation.
+  #
+  # Con nombre fijo y BeforeHookCreation, Argo CD 3.5.0 tiene que borrar el Job
+  # de la sincronizacion anterior antes de crear el nuevo, y mientras ese Job
+  # exista (lo conservamos 24 h por ttlSecondsAfterFinished) la operacion pasa a
+  # "waiting for deletion of hook batch/Job/erp-db-migrate" y en el mismo
+  # segundo termina Succeeded SIN ejecutar el hook ni aplicar nada. Visto tres
+  # veces el 2026-09-10 en produccion (18:17, 21:07): la primera sincronizacion
+  # tras otra reciente no desplegaba, la segunda si. La primera del dia (16:03)
+  # funcionaba porque el Job del dia anterior ya habia vencido su TTL.
+  #
+  # Con generateName cada sincronizacion crea un Job con nombre propio, no hay
+  # nada que borrar antes, y los anteriores se van solos a las 24 h. Para leer
+  # los logs: kubectl -n erp-pdn logs -l app.kubernetes.io/name=erp-db-migrate
+  generateName: erp-db-migrate-
   annotations:
     argocd.argoproj.io/hook: PreSync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 2
-  ttlSecondsAfterFinished: 86400   # conserva los logs 24 h para diagnostico
+  ttlSecondsAfterFinished: 86400   # conserva los logs 24 h para diagnostico; tambien limpia los Jobs viejos
   template:
     metadata:
       labels: { app.kubernetes.io/name: erp-db-migrate }
