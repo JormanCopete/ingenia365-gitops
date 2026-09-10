@@ -1,10 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: erp-dev
 resources:
   - ../../base
-
 # DEV: se auto-migra y se siembra con datos demo. Es el ambiente donde el
 # esquema puede romperse sin consecuencias.
 configMapGenerator:
@@ -23,7 +21,6 @@ configMapGenerator:
       - WebAuthn__RelyingPartyId=ingenia365.com
       - WebAuthn__OrigenesPermitidos__0=https://app-dev.ingenia365.com
       - Serilog__MinimumLevel__Default=Debug
-
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
@@ -37,25 +34,24 @@ configMapGenerator:
 # vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:479d0c80af168f21e6cf53569f7b305fac94800936e8ecd61e5f53581143f618
+    digest: sha256:1fae47db4a31ae4a3411dcba5582fa8b100bfa8a5cdc03a652f403dadc3778df
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:ff4e2a602846e36c200b15b6dc4adc5a8054dcd16c903624722ab19881690b24
-
+    digest: sha256:d2873949eca4d89145e64d805e1a4c562aa737607ecf1427c7ba7963e2a58b3a
 patches:
   # Recursos reducidos: DEV y QA comparten un nodo con la observabilidad.
-  - target: { kind: Deployment, name: erp-api }
+  - target: {kind: Deployment, name: erp-api}
     patch: |-
       - op: replace
         path: /spec/template/spec/containers/0/resources/requests/memory
         value: 256Mi
-  - target: { kind: StatefulSet, name: erp-mongo }
+  - target: {kind: StatefulSet, name: erp-mongo}
     patch: |-
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
         value: 5Gi
   # Ver la nota del overlay de QA: DEV y QA comparten el Traefik de nonprod y
   # sin Host() las rutas se pisan entre namespaces.
-  - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: erp }
+  - target: {group: traefik.io, version: v1alpha1, kind: IngressRoute, name: erp}
     patch: |-
       - op: replace
         path: /spec/routes/0/match

@@ -1,10 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: erp-qa
 resources:
   - ../../base
-
 # QA: se auto-migra (para probar que las migraciones aplican limpio) y lleva
 # datos demo para certificacion funcional. Es el ensayo general de produccion.
 configMapGenerator:
@@ -45,7 +43,6 @@ configMapGenerator:
       # MailKit rechaza la conexion. Cuando el servidor tenga un certificado
       # valido, borrar esta linea.
       - Smtp__HuellaCertificadoAceptada=54EA10957D7018ADE475CA084C1CADD14030D460CD6EED62F7CEDCDA15974E1C
-
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
@@ -59,12 +56,11 @@ configMapGenerator:
 # vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:479d0c80af168f21e6cf53569f7b305fac94800936e8ecd61e5f53581143f618
+    digest: sha256:1fae47db4a31ae4a3411dcba5582fa8b100bfa8a5cdc03a652f403dadc3778df
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:ff4e2a602846e36c200b15b6dc4adc5a8054dcd16c903624722ab19881690b24
-
+    digest: sha256:d2873949eca4d89145e64d805e1a4c562aa737607ecf1427c7ba7963e2a58b3a
 patches:
-  - target: { kind: StatefulSet, name: erp-mongo }
+  - target: {kind: StatefulSet, name: erp-mongo}
     patch: |-
       - op: replace
         path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
@@ -74,7 +70,7 @@ patches:
   # de nonprod, asi que dos rutas PathPrefix(`/`) con la misma prioridad se
   # pisan y todo el trafico de los DOS hostnames acaba en un solo namespace.
   # Sin Host() el sintoma es que uno de los dos ambientes sirve al otro.
-  - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: erp }
+  - target: {group: traefik.io, version: v1alpha1, kind: IngressRoute, name: erp}
     patch: |-
       - op: replace
         path: /spec/routes/0/match
