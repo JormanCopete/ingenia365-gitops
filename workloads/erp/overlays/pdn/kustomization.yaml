@@ -39,11 +39,11 @@ configMapGenerator:
 # en Argo CD, y el digest en el commit es lo que se aprueba.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:036bd0ce27092b132117503ae83f81024c27b45dc777df9a96326d650dff777d
+    digest: sha256:14dfd786078d09b6a21e684544dcf0bcf3cff380248f2159470e6a9d9181ecec
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:203bd25f1fddd67fe534c257ef242ec3a18a5f6dd43265f1ddb181fc814f9571
+    digest: sha256:cd9942c45340e2fab6275bb657ee8ceced93d050470fb8531157fb045e93aa7e
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
-    digest: sha256:7dafe98a6622496ebf75caa7ed9bca9d19b1000b5f6ff11af3c5fd29b7f63178
+    digest: sha256:72ea2b6c1d6d7ef41711de020702867a483fbcc97b76641a19ca666bb07765f9
 patches:
   # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.
   # (La Web no tiene circuitos Blazor Server, asi que no necesita afinidad.)
