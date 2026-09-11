@@ -66,11 +66,15 @@ spec:
       # [Migrator.ModeloDeAislamiento]), pero eso abortaria la sincronizacion:
       # mejor invocarlo bien.
       #
-      # PENDIENTE, y conviene que este escrito: las bases de cada cooperativa no
-      # las migra NADIE en produccion. La API si lo hace, pero solo con
-      # AutoMigrate=true, y aqui esta en false a proposito. Hace falta un paso
-      # por cooperativa apuntando la cadena operativa a SU base. Con cero
-      # cooperativas no urge; con la primera, si.
+      # Tres pasos, en este orden y cada uno espera al anterior (por eso los dos
+      # primeros son initContainers): administrativa -> operativa (plantilla) ->
+      # la base de CADA cooperativa (P14, cerrado el 2026-09-11). El tercero lee
+      # la lista de cooperativas de la administrativa, asi que tiene que ir
+      # despues de migrarla, y usa el mismo aprovisionador idempotente que la API
+      # con AutoMigrate=true: crea la base si falta, migra y siembra lo
+      # parametrico. Si una cooperativa falla, el migrador sale con codigo 3 y
+      # Argo aborta la sincronizacion: una API nueva sobre una base vieja rompe
+      # justo a esa cooperativa.
       initContainers:
         # 1) Base administrativa. Aqui viaja el traslado de secretos MFA.
         - name: migrator-admin
@@ -100,14 +104,40 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }
-      containers:
         # 2) Base operativa (la plantilla). El --tenant con un identificador que
-        #    no existe neutraliza el bucle de cooperativas: el filtro salta toda
-        #    cooperativa que no coincida, y ninguna se llama asi.
-        - name: migrator
+        #    no existe neutraliza el bucle antiguo de esquemas: el filtro salta
+        #    toda cooperativa que no coincida, y ninguna se llama asi.
+        - name: migrator-operativa
           image: ghcr.io/jormancopete/ingenia365erp/migrator:release   # el overlay fija el digest
           imagePullPolicy: Always
           args: ["migrate", "--scope", "tenants", "--tenant", "__ninguna__"]
+          env:
+            - name: DOTNET_ENVIRONMENT
+              value: Production
+            - name: Database__Provider
+              value: PostgreSQL
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: erp-db-app, key: username } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: erp-db-app, key: password } }
+            - name: Database__ConnectionStrings__PostgreSQL
+              value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+            - name: Database__AdminConnectionStrings__PostgreSQL
+              value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp_admin;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      containers:
+        # 3) La base de cada cooperativa activa con base propia. Con cero
+        #    cooperativas registra "0 de 0" y termina; con la primera, es lo que
+        #    le aplica cada entrega.
+        - name: migrator-cooperativas
+          image: ghcr.io/jormancopete/ingenia365erp/migrator:release   # el overlay fija el digest
+          imagePullPolicy: Always
+          args: ["migrate", "--scope", "cooperativas"]
           env:
             - name: DOTNET_ENVIRONMENT
               value: Production
