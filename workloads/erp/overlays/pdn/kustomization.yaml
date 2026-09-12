@@ -24,6 +24,22 @@ configMapGenerator:
       - WebAuthn__RelyingPartyId=ingenia365.com
       - WebAuthn__OrigenesPermitidos__0=https://app.ingenia365.com
       - Serilog__MinimumLevel__Default=Information
+      # Correo saliente (mismo relay que QA). Hasta el 2026-09-11 produccion no
+      # tenia ninguna clave Smtp__ y regia localhost:25: al registrar la primera
+      # cooperativa (COOFLOPAL) la invitacion del administrador no salio y el
+      # boton «Reenviar» respondia 500 tras cuatro intentos contra un puerto
+      # cerrado. Usuario y contrasena NO van aqui: van en el Secret erp-smtp
+      # (tools/scripts/crear-secreto-smtp.ps1 -Ambiente pdn en el repo del ERP).
+      # Sin ese Secret la API arranca igual y el envio falla con autenticacion.
+      - Smtp__Host=mail.notifica365.com
+      - Smtp__Port=587
+      - Smtp__UseStartTls=true
+      - Smtp__FromAddress=noresponder.ingenia365erp@notifica365.com
+      - Smtp__FromName=No Responder IngenIA365 ERP
+      # PARCHE, no secreto: huella publica del certificado autofirmado que
+      # presenta mail.notifica365.com (ver la nota del overlay de QA). Borrar
+      # cuando el servidor tenga un certificado valido.
+      - Smtp__HuellaCertificadoAceptada=54EA10957D7018ADE475CA084C1CADD14030D460CD6EED62F7CEDCDA15974E1C
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
