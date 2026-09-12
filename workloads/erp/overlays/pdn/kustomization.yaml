@@ -40,6 +40,17 @@ configMapGenerator:
       # presenta mail.notifica365.com (ver la nota del overlay de QA). Borrar
       # cuando el servidor tenga un certificado valido.
       - Smtp__HuellaCertificadoAceptada=54EA10957D7018ADE475CA084C1CADD14030D460CD6EED62F7CEDCDA15974E1C
+      # Cuenta de RESPALDO (2026-09-12): si la principal agota sus reintentos, el
+      # correo sale por esta, con su propio remitente (el servidor exige que el
+      # «De:» sea la cuenta autenticada). Mismo servidor, asi que cubre un buzon
+      # bloqueado o una contrasena vencida, NO una caida del relay. Credenciales
+      # en el Secret erp-smtp-respaldo.
+      - Smtp__Respaldo__Host=mail.notifica365.com
+      - Smtp__Respaldo__Port=587
+      - Smtp__Respaldo__UseStartTls=true
+      - Smtp__Respaldo__FromAddress=ingeniaerp@notifica365.com
+      - Smtp__Respaldo__FromName=IngenIA365 ERP
+      - Smtp__Respaldo__HuellaCertificadoAceptada=54EA10957D7018ADE475CA084C1CADD14030D460CD6EED62F7CEDCDA15974E1C
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"

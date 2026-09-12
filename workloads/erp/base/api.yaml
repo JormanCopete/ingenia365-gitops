@@ -82,6 +82,15 @@ spec:
               valueFrom: { secretKeyRef: { name: erp-smtp, key: username, optional: true } }
             - name: Smtp__Password
               valueFrom: { secretKeyRef: { name: erp-smtp, key: password, optional: true } }
+            # Segunda cuenta (Smtp:Respaldo): por ella sale el correo cuando la
+            # principal agota sus reintentos. Host y remitente en el overlay;
+            # credenciales en erp-smtp-respaldo (crear-secreto-smtp.ps1 -Respaldo).
+            # Sin overlay que declare Smtp__Respaldo__Host no hay respaldo,
+            # tenga o no Secret.
+            - name: Smtp__Respaldo__Username
+              valueFrom: { secretKeyRef: { name: erp-smtp-respaldo, key: username, optional: true } }
+            - name: Smtp__Respaldo__Password
+              valueFrom: { secretKeyRef: { name: erp-smtp-respaldo, key: password, optional: true } }
           volumeMounts:
             - { name: jwt-keys, mountPath: /keys, readOnly: true }
             - { name: attachments, mountPath: /app/storage/attachments }
