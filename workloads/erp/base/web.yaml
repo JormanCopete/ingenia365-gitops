@@ -39,20 +39,25 @@ spec:
               value: "http://erp-api"
             - name: AppMode__ApiBaseUrl
               value: "http://erp-api"
+          # /health (imagen del 2026-09-13 en adelante): responde sin prerenderizar
+          # la aplicacion. Antes las sondas pegaban a "/", que renderiza el shell
+          # de Blazor entero cada 10-20 s por replica.
           livenessProbe:
-            httpGet: { path: /, port: http }
-            initialDelaySeconds: 20
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
             periodSeconds: 20
-            timeoutSeconds: 3
+            timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
-            httpGet: { path: /, port: http }
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 3
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 5
+          # CPU: limite explicito (ver la nota en api.yaml: el LimitRange de
+          # produccion inyectaba 500m y la Web servia el cliente WebAssembly a
+          # todos los usuarios con medio nucleo).
           resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits:   { memory: 768Mi }
+            requests: { cpu: 200m, memory: 256Mi }
+            limits:   { cpu: "1", memory: 768Mi }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }

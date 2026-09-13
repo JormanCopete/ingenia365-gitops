@@ -30,7 +30,10 @@ metadata:
   name: erp-pdn-quota
 spec:
   hard:
-    requests.cpu: "3"
+    # 4 CPU de requests: API 2x500m, Web 2x200m, PostgreSQL 500m, Mongo 200m,
+    # Redis 50m y el sidecar de Mongo suman 2,2; el resto es margen para el
+    # excedente de una actualizacion sin corte (maxSurge:1).
+    requests.cpu: "4"
     requests.memory: 5Gi
     # 8Gi BLOQUEABA TODA ACTUALIZACION SIN CORTE, y de la peor forma posible.
     #
@@ -49,8 +52,14 @@ spec:
     limits.memory: 10Gi
     persistentvolumeclaims: "10"
 ---
-# Todo contenedor sin limites explicitos recibe estos: un pod mal configurado
-# no puede consumir el nodo entero.
+# Todo contenedor que no declare un recurso recibe el valor de aqui: un pod mal
+# configurado no puede consumir el nodo entero. OJO: Kubernetes completa CADA
+# recurso ausente por separado. Hasta el 2026-09-13 `default` traia tambien
+# `cpu: 500m`, y como api.yaml y web.yaml solo declaraban limite de memoria, la
+# API y la Web corrian con medio nucleo cada una sin que ningun manifiesto lo
+# dijera (medido: 97 s estrangulados de 132 s de uso en la API, ociosa). El tope
+# de CPU ahora lo declara cada workload; aqui queda solo la memoria, y
+# `erp-db-1` (anterior al LimitRange) no heredara 500m cuando se recree.
 apiVersion: v1
 kind: LimitRange
 metadata:
@@ -58,7 +67,7 @@ metadata:
 spec:
   limits:
     - type: Container
-      default: { cpu: "500m", memory: 512Mi }
+      default: { memory: 512Mi }
       defaultRequest: { cpu: "100m", memory: 128Mi }
       max: { memory: 2Gi }
 ---
