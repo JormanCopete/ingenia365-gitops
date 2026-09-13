@@ -56,9 +56,9 @@ configMapGenerator:
 # vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:96979cd57a8be22f4416d30677bf2693dcf72376079435a657634fe15c09b1c4
+    digest: sha256:eee27f1998ecc69b7623c4278df42a7fdf130470f4ec64f0842ee80b55097d6a
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:1e82a5457b44cd37db3d94ea78a1f1d41070493d0083f64b8b3e2edba65a1893
+    digest: sha256:598850326f3fa44281a25d935d07dc2b116debe177b56e0274b635f742df53cf
 patches:
   - target: {kind: StatefulSet, name: erp-mongo}
     patch: |-
