@@ -13,6 +13,9 @@
 #   Zero Trust -> Networks -> Tunnels -> erp-nonprod -> Published applications
 #     app-qa.ingenia365.com   ->  http://traefik.kube-system.svc.cluster.local:80
 #     app-dev.ingenia365.com  ->  http://traefik.kube-system.svc.cluster.local:80
+#     argocd-webhook.ingenia365.com -> https://argocd-server.argocd.svc.cluster.local:443
+#         (No TLS Verify; solo /api/webhook pasa, el resto lo bloquea Cloudflare Access.
+#          Es el webhook GitHub -> Argo CD; ver despliegue-infraestructura.md del ERP)
 #
 # UN SOLO tunel para los DOS ambientes, y por eso los IngressRoute de los
 # overlays dev/qa llevan matcher de Host(): a este Traefik le llegan dos
