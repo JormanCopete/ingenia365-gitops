@@ -125,3 +125,5 @@ spec:
   selector: { app.kubernetes.io/name: cloudflared }
   ports:
     - { name: metrics, port: 2000, targetPort: metrics }
+
+# Webhook GitHub -> Argo CD activo desde el 2026-09-13 (ver el ERP: docs/operaciones/despliegue-infraestructura.md).
