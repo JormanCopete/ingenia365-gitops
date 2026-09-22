@@ -38,9 +38,9 @@ configMapGenerator:
 # vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:8dd6fe0e09db771fc54a35eb9e395096f09a4ca251ebe157b862ebb0f271da58
+    digest: sha256:2a11a69b0c5452bafa3382bb44fa48aff4f6844694cc641be9cf4bbc0b5f753f
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:9a42b2e0ba79c4869188fcaf143f841e19d6643d70acea8996335a10ad59b915
+    digest: sha256:39386aa05385595b56cd84a96a0f1fc9e1f3c36e62b4db804e175b9877d0650d
 patches:
   # Recursos reducidos: DEV y QA comparten un nodo con la observabilidad.
   - target: {kind: Deployment, name: erp-api}
