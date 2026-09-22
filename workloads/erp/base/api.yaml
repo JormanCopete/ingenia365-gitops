@@ -91,6 +91,19 @@ spec:
               valueFrom: { secretKeyRef: { name: erp-smtp-respaldo, key: username, optional: true } }
             - name: Smtp__Respaldo__Password
               valueFrom: { secretKeyRef: { name: erp-smtp-respaldo, key: password, optional: true } }
+            # --- Adjuntos en S3: credencial del usuario IAM ingenia365-erp-adjuntos ---
+            # Se llaman AWS_* y no AttachmentStorage__* porque quien las lee es el
+            # SDK por su cadena estandar; el proceso nunca las toca. Esa credencial
+            # puede escribir, leer y borrar objetos del bucket de adjuntos, pero NO
+            # borrar versiones (un borrado deja marca y se recupera) y tiene un Deny
+            # explicito sobre el bucket de respaldos.
+            # optional: un ambiente sin el Secret arranca igual y el fallo aparece en
+            # /health/ready en vez de dejar el pod en CrashLoopBackOff sin explicacion.
+            # El Secret se lee AL ARRANCAR: creado despues, hay que relevar los pods.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom: { secretKeyRef: { name: erp-adjuntos-s3, key: accessKeyId, optional: true } }
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: erp-adjuntos-s3, key: secretAccessKey, optional: true } }
           volumeMounts:
             - { name: jwt-keys, mountPath: /keys, readOnly: true }
             - { name: attachments, mountPath: /app/storage/attachments }

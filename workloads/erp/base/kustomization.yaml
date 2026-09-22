@@ -25,6 +25,19 @@ configMapGenerator:
       - Database__Startup__RetryIntervalSeconds=5
       - PwnedPassword__Enabled=true
       - Serilog__MinimumLevel__Default=Information
+      # Adjuntos en S3 (2026-09-22). Hasta ese dia los tres ambientes escribian
+      # en el PVC erp-attachments: un disco local-path sin redundancia, fuera de
+      # los respaldos diarios y ReadWriteOnce, o sea que con un segundo nodo una
+      # de las dos replicas de la API no habria podido montarlo. Se migro con el
+      # volumen VACIO en produccion, asi que no hubo nada que mover.
+      # El bucket es OTRO que el de respaldos, a proposito: aquel tiene Object
+      # Lock a 40 dias porque un respaldo no debe poder borrarse, y un adjunto SI
+      # se borra cuando su dueno lo borra. El cifrado sigue siendo nuestro
+      # (AES-256-GCM con clave por archivo, antes de subir); el SSE-S3 del bucket
+      # va encima, no en lugar del nuestro. El prefijo lo pone cada overlay.
+      - AttachmentStorage__Provider=S3
+      - AttachmentStorage__S3__BucketName=ingenia365-erp-attachments
+      - AttachmentStorage__S3__Region=us-east-1
 
 generatorOptions:
   disableNameSuffixHash: false   # el hash fuerza rollout cuando cambia la config

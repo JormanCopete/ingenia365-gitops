@@ -21,6 +21,10 @@ configMapGenerator:
       - WebAuthn__RelyingPartyId=ingenia365.com
       - WebAuthn__OrigenesPermitidos__0=https://app-dev.ingenia365.com
       - Serilog__MinimumLevel__Default=Debug
+      # Prefijo de este ambiente dentro del bucket de adjuntos. NO se guarda en
+      # la base (COR_Attachments.BlobUri lleva la referencia sin el), asi que
+      # mover el prefijo -o el bucket- no invalida lo ya escrito.
+      - AttachmentStorage__S3__Prefix=dev
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"

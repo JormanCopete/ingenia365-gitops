@@ -43,6 +43,10 @@ configMapGenerator:
       # MailKit rechaza la conexion. Cuando el servidor tenga un certificado
       # valido, borrar esta linea.
       - Smtp__HuellaCertificadoAceptada=54EA10957D7018ADE475CA084C1CADD14030D460CD6EED62F7CEDCDA15974E1C
+      # Prefijo de este ambiente dentro del bucket de adjuntos. NO se guarda en
+      # la base (COR_Attachments.BlobUri lleva la referencia sin el), asi que
+      # mover el prefijo -o el bucket- no invalida lo ya escrito.
+      - AttachmentStorage__S3__Prefix=qa
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
