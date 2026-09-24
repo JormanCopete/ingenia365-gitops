@@ -5,6 +5,13 @@ resources:
   - ../../base
   - migracion-job.yaml
   - disponibilidad.yaml
+# Feature 011 (US5): credenciales TEMPORALES para el bucket de adjuntos con IAM
+# Roles Anywhere desde el primer dia: produccion nunca usa la llave permanente.
+# Requiere el Secret erp-adjuntos-certificado en erp-pdn
+# (crear-certificados-adjuntos.ps1 -Ambientes pdn). Receta del ERP:
+# docs/operaciones/despliegue-adjuntos-directos.md.
+components:
+  - ../../components/adjuntos-roles-anywhere
 # PRODUCCION: no se auto-migra (fail-fast si hay pendientes) y no lleva datos
 # demo. El esquema lo aplica el Job PreSync antes de rotar los pods.
 configMapGenerator:
@@ -55,6 +62,14 @@ configMapGenerator:
       # la base (COR_Attachments.BlobUri lleva la referencia sin el), asi que
       # mover el prefijo -o el bucket- no invalida lo ya escrito.
       - AttachmentStorage__S3__Prefix=pdn
+  # Salidas de la pila CloudFormation ingenia365-erp-adjuntos-roles-anywhere
+  # (cuenta 058264424927, us-east-1). No son secretos. El rol de produccion solo
+  # alcanza el prefijo pdn/ del bucket.
+  - name: erp-roles-anywhere
+    literals:
+      - trustAnchorArn=arn:aws:rolesanywhere:us-east-1:058264424927:trust-anchor/415c26a3-caea-4e6a-9cf8-303f37a917b4
+      - profileArn=arn:aws:rolesanywhere:us-east-1:058264424927:profile/65d851ed-8722-497e-ad76-cd48bdf24fec
+      - roleArn=arn:aws:iam::058264424927:role/ingenia365-erp-adjuntos-pdn
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
@@ -75,6 +90,10 @@ images:
     digest: sha256:444f76e6b0931d0b1144dee62475645fad7aa8f027c1d28a265efac8683f7645
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
     digest: sha256:21e231c46b9971610fc9e3ea97c3591bb79fe42c13cf9cef1c1438b9b488d12a
+  # Sidecar de credenciales (feature 011). Digest de partida el de develop; el CI
+  # de release lo reemplaza como a los demas.
+  - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
+    digest: sha256:54fe623e4dbafd595938173fe0b379e458bf0f2179c005b98b362ea48e933a3a
 patches:
   # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.
   # (La Web no tiene circuitos Blazor Server, asi que no necesita afinidad.)

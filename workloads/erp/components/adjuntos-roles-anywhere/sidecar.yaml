@@ -45,6 +45,8 @@ spec:
             capabilities: { drop: ["ALL"] }
           # El certificado y su llave se montan SOLO aqui: el proceso de la API
           # nunca los ve (research R3).
+          # Se montan 0400 y la imagen corre sin privilegios: los puede leer por el
+          # fsGroup 10001 del pod (base/api.yaml). Sin el, "could not parse PEM data".
           volumeMounts:
             - { name: certificado-adjuntos, mountPath: /certificado, readOnly: true }
       containers:
