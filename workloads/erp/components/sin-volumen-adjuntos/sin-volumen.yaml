@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          volumeMounts:
+            - mountPath: /app/storage/attachments
+              $patch: delete
+      volumes:
+        - name: attachments
+          $patch: delete

@@ -9,6 +9,7 @@ resources:
 # en erp-qa (instalado el 2026-09-23 con crear-certificados-adjuntos.ps1).
 components:
   - ../../components/adjuntos-roles-anywhere
+  - ../../components/sin-volumen-adjuntos
 # QA: se auto-migra (para probar que las migraciones aplican limpio) y lleva
 # datos demo para certificacion funcional. Es el ensayo general de produccion.
 configMapGenerator:

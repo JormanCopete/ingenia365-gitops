@@ -1,0 +1,22 @@
+# Retira el disco de adjuntos (PVC erp-attachments) de la API.
+#
+# Desde la feature 011 del ERP los adjuntos viven en el bucket
+# ingenia365-erp-attachments y el archivo ni siquiera pasa por la API; el PVC
+# local-path quedo montado sin usarse. Se retira ambiente por ambiente: el
+# 2026-09-24 en DEV y QA, con los dos volumenes vacios (0 archivos). Produccion
+# tambien lo tiene vacio; cuando se retire alli, esto pasa a base y el
+# componente se borra.
+#
+# Argo con prune borra el PVC y, con la politica Delete de local-path, el
+# directorio del nodo.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: sin-volumen.yaml
+    target: { kind: Deployment, name: erp-api }
+  - patch: |-
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: erp-attachments
+      $patch: delete
