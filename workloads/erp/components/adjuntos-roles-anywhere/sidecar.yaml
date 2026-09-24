@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+spec:
+  template:
+    spec:
+      initContainers:
+        # Sidecar NATIVO (initContainer con restartPolicy Always, Kubernetes >= 1.29;
+        # los clusteres van en 1.36): arranca y queda listo ANTES que la API, asi la
+        # primera sonda del almacen ya encuentra credencial. La sonda del blobstore
+        # recuerda un fallo cinco minutos: si el sidecar llegara tarde, la API
+        # quedaria fuera de Ready ese rato sin motivo.
+        - name: credenciales-adjuntos
+          image: ghcr.io/jormancopete/ingenia365erp/credential-helper:develop   # el overlay fija el DIGEST
+          restartPolicy: Always
+          args:
+            - serve
+            - --certificate=/certificado/tls.crt
+            - --private-key=/certificado/tls.key
+            - --trust-anchor-arn=$(TRUST_ANCHOR_ARN)
+            - --profile-arn=$(PROFILE_ARN)
+            - --role-arn=$(ROLE_ARN)
+            - --port=9911
+            # TTL 1: la respuesta no sale del pod (como el hop limit de IMDSv2 en EC2).
+            - --hop-limit=1
+          env:
+            - name: TRUST_ANCHOR_ARN
+              valueFrom: { configMapKeyRef: { name: erp-roles-anywhere, key: trustAnchorArn } }
+            - name: PROFILE_ARN
+              valueFrom: { configMapKeyRef: { name: erp-roles-anywhere, key: profileArn } }
+            - name: ROLE_ARN
+              valueFrom: { configMapKeyRef: { name: erp-roles-anywhere, key: roleArn } }
+          startupProbe:
+            tcpSocket: { port: 9911 }
+            periodSeconds: 2
+            failureThreshold: 30
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits:   { cpu: 200m, memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          # El certificado y su llave se montan SOLO aqui: el proceso de la API
+          # nunca los ve (research R3).
+          volumeMounts:
+            - { name: certificado-adjuntos, mountPath: /certificado, readOnly: true }
+      containers:
+        - name: api
+          env:
+            # El SDK prefiere las variables AWS_* a cualquier otra fuente: con ellas
+            # presentes seguiria usando la llave permanente y el sidecar no serviria.
+            - name: AWS_ACCESS_KEY_ID
+              $patch: delete
+            - name: AWS_SECRET_ACCESS_KEY
+              $patch: delete
+            # Sin barra final: algunos SDK la rechazan.
+            - name: AWS_EC2_METADATA_SERVICE_ENDPOINT
+              value: http://127.0.0.1:9911
+      volumes:
+        - name: certificado-adjuntos
+          secret: { secretName: erp-adjuntos-certificado, defaultMode: 0400 }

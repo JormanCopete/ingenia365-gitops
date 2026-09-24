@@ -1,0 +1,38 @@
+# Credenciales TEMPORALES para el bucket de adjuntos (feature 011 del ERP, US5).
+#
+# Reemplaza la llave permanente del usuario IAM ingenia365-erp-adjuntos por IAM
+# Roles Anywhere: un sidecar con el binario oficial de AWS (aws_signing_helper
+# serve) presenta el certificado del ambiente y entrega a la API credenciales de
+# UNA hora, acotadas al prefijo del ambiente, por un endpoint que imita al IMDSv2
+# en 127.0.0.1:9911. La API las toma por la cadena estandar del SDK con
+# AWS_EC2_METADATA_SERVICE_ENDPOINT; su codigo no cambia.
+#
+# COMO SE ACTIVA EN UN OVERLAY (y solo cuando exista todo lo de abajo):
+#   components:
+#     - ../../components/adjuntos-roles-anywhere
+#   configMapGenerator:
+#     - name: erp-roles-anywhere
+#       literals:
+#         - trustAnchorArn=<salida TrustAnchorArn de la pila CloudFormation>
+#         - profileArn=<salida ProfileArn>
+#         - roleArn=arn:aws:iam::058264424927:role/ingenia365-erp-adjuntos-<ambiente>
+#   images:
+#     - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
+#       newTag: develop        # el CI la reemplaza por el digest en el primer despliegue
+#
+# REQUISITOS, en este orden (docs/operaciones/adjuntos-en-s3.md del ERP):
+#   1. La imagen del sidecar publicada (job credential-helper del CI del ERP).
+#   2. El Secret erp-adjuntos-certificado en el namespace
+#      (tools/scripts/crear-certificados-adjuntos.ps1 del ERP).
+#   3. La pila docs/operaciones/plantillas/adjuntos-roles-anywhere.yaml aplicada.
+# Sin el Secret el sidecar no arranca y, como es sidecar nativo, la API tampoco:
+# es a proposito, un pod sin credencial no tiene que recibir trafico.
+#
+# Con el componente activo, la API deja de leer AWS_ACCESS_KEY_ID y
+# AWS_SECRET_ACCESS_KEY: el SDK las preferiria al sidecar. El Secret
+# erp-adjuntos-s3 se borra a mano del namespace despues de verificar (T075).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: sidecar.yaml
+    target: { kind: Deployment, name: erp-api }

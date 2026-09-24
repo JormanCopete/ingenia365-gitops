@@ -3,6 +3,12 @@ kind: Kustomization
 namespace: erp-qa
 resources:
   - ../../base
+# Feature 011 (US5): credenciales TEMPORALES para el bucket de adjuntos con
+# IAM Roles Anywhere, en lugar de la llave permanente del Secret erp-adjuntos-s3.
+# Ver la cabecera del componente. Requiere el Secret erp-adjuntos-certificado
+# en erp-qa (instalado el 2026-09-23 con crear-certificados-adjuntos.ps1).
+components:
+  - ../../components/adjuntos-roles-anywhere
 # QA: se auto-migra (para probar que las migraciones aplican limpio) y lleva
 # datos demo para certificacion funcional. Es el ensayo general de produccion.
 configMapGenerator:
@@ -47,6 +53,14 @@ configMapGenerator:
       # la base (COR_Attachments.BlobUri lleva la referencia sin el), asi que
       # mover el prefijo -o el bucket- no invalida lo ya escrito.
       - AttachmentStorage__S3__Prefix=qa
+  # Salidas de la pila CloudFormation ingenia365-erp-adjuntos-roles-anywhere
+  # (cuenta 058264424927, us-east-1). No son secretos. El rol es el de ESTE
+  # ambiente: su politica solo alcanza el prefijo qa/ del bucket.
+  - name: erp-roles-anywhere
+    literals:
+      - trustAnchorArn=arn:aws:rolesanywhere:us-east-1:058264424927:trust-anchor/415c26a3-caea-4e6a-9cf8-303f37a917b4
+      - profileArn=arn:aws:rolesanywhere:us-east-1:058264424927:profile/65d851ed-8722-497e-ad76-cd48bdf24fec
+      - roleArn=arn:aws:iam::058264424927:role/ingenia365-erp-adjuntos-qa
 # Imagenes por DIGEST, no por etiqueta (P3, cerrado el 2026-09-10).
 #
 # Estas lineas las escribe el CI del repositorio de la aplicacion (job "gitops"
@@ -63,6 +77,10 @@ images:
     digest: sha256:c959e227d2f3fff0b69acf35cd0d584190e67fb1fb6126e006ee21c6a78115dc
   - name: ghcr.io/jormancopete/ingenia365erp/web
     digest: sha256:f279c970df25510b9bd288f8893741f8918bf272877eebe4a91196bcdcfe395c
+  # Sidecar de credenciales (feature 011). El primer digest es el de develop
+  # af84c24; desde ahi lo reescribe el CI como los demas.
+  - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
+    digest: sha256:1ecbc259d0e1d08c2a982d333bd31780fde96db2ec24d7f04f6b2d3b0407d8be
 patches:
   - target: {kind: StatefulSet, name: erp-mongo}
     patch: |-

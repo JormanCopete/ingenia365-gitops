@@ -31,10 +31,12 @@ configMapGenerator:
       # de las dos replicas de la API no habria podido montarlo. Se migro con el
       # volumen VACIO en produccion, asi que no hubo nada que mover.
       # El bucket es OTRO que el de respaldos, a proposito: aquel tiene Object
-      # Lock a 40 dias porque un respaldo no debe poder borrarse, y un adjunto SI
-      # se borra cuando su dueno lo borra. El cifrado sigue siendo nuestro
-      # (AES-256-GCM con clave por archivo, antes de subir); el SSE-S3 del bucket
-      # va encima, no en lugar del nuestro. El prefijo lo pone cada overlay.
+      # Lock a 40 dias porque un respaldo no debe poder borrarse. Un adjunto no se
+      # borra solo (feature 011): lo retira una persona con permiso y queda 90 dias
+      # en la papelera del bucket versionado, de donde soporte lo recupera. Desde la
+      # feature 011 el navegador sube y baja directo al bucket con autorizaciones
+      # firmadas y lo nuevo lo cifra el bucket (SSE-S3); lo escrito antes sigue
+      # cifrado por la aplicacion y se lee por la API. El prefijo lo pone cada overlay.
       - AttachmentStorage__Provider=S3
       - AttachmentStorage__S3__BucketName=ingenia365-erp-attachments
       - AttachmentStorage__S3__Region=us-east-1
