@@ -52,12 +52,6 @@ spec:
       containers:
         - name: api
           env:
-            # El SDK prefiere las variables AWS_* a cualquier otra fuente: con ellas
-            # presentes seguiria usando la llave permanente y el sidecar no serviria.
-            - name: AWS_ACCESS_KEY_ID
-              $patch: delete
-            - name: AWS_SECRET_ACCESS_KEY
-              $patch: delete
             # Sin barra final: algunos SDK la rechazan.
             - name: AWS_EC2_METADATA_SERVICE_ENDPOINT
               value: http://127.0.0.1:9911

@@ -28,9 +28,8 @@
 # Sin el Secret el sidecar no arranca y, como es sidecar nativo, la API tampoco:
 # es a proposito, un pod sin credencial no tiene que recibir trafico.
 #
-# Con el componente activo, la API deja de leer AWS_ACCESS_KEY_ID y
-# AWS_SECRET_ACCESS_KEY: el SDK las preferiria al sidecar. El Secret
-# erp-adjuntos-s3 se borra a mano del namespace despues de verificar (T075).
+# La llave permanente (AWS_ACCESS_KEY_ID/SECRET, Secret erp-adjuntos-s3) ya no
+# existe: se retiro de base el 2026-09-24, con los tres ambientes en este componente.
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 patches:
