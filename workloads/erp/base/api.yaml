@@ -98,7 +98,6 @@ spec:
             # 2026-09-24 junto con el usuario IAM ingenia365-erp-adjuntos.
           volumeMounts:
             - { name: jwt-keys, mountPath: /keys, readOnly: true }
-            - { name: attachments, mountPath: /app/storage/attachments }
           # /health/live: el proceso vive. Si falla, Kubernetes reinicia el pod.
           # Sin initialDelaySeconds: la startupProbe ya cubre el arranque y la
           # liveness no corre hasta que aquella pasa.
@@ -147,8 +146,6 @@ spec:
       volumes:
         - name: jwt-keys
           secret: { secretName: erp-jwt-keys, defaultMode: 0400 }
-        - name: attachments
-          persistentVolumeClaim: { claimName: erp-attachments }
 ---
 apiVersion: v1
 kind: Service
@@ -159,11 +156,3 @@ spec:
   selector: { app.kubernetes.io/name: erp-api }
   ports:
     - { name: http, port: 80, targetPort: http }
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: erp-attachments
-spec:
-  accessModes: ["ReadWriteOnce"]
-  resources: { requests: { storage: 10Gi } }
