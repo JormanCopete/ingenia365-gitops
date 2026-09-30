@@ -49,9 +49,14 @@ spec:
                   set -e
                   FECHA=$(date -u +%F)
                   mongodump \
-                    --uri "mongodb://erp-mongo:27017/?replicaSet=rs0" \
+                    --uri "$MONGO_URI" \
                     --oplog --archive="/trabajo/audit-${FECHA}.archive.gz" --gzip
                   ls -lh /trabajo/
+              # Mongo exige usuario desde T986 (componente auditoria-protegida del ERP):
+              # erp-respaldo, rol backup. La cadena trae la clave: sale del Secret.
+              env:
+                - name: MONGO_URI
+                  valueFrom: { secretKeyRef: { name: erp-mongo-respaldo, key: uri } }
               volumeMounts: [{ name: trabajo, mountPath: /trabajo }]
               resources:
                 requests: { cpu: 100m, memory: 256Mi }
@@ -139,9 +144,14 @@ spec:
                   set -e
                   FECHA=$(date -u +%F)
                   mongodump \
-                    --uri "mongodb://erp-mongo:27017/?replicaSet=rs0" \
+                    --uri "$MONGO_URI" \
                     --oplog --archive="/trabajo/audit-${FECHA}.archive.gz" --gzip
                   ls -lh /trabajo/
+              # Mongo exige usuario desde T986 (componente auditoria-protegida del ERP):
+              # erp-respaldo, rol backup. La cadena trae la clave: sale del Secret.
+              env:
+                - name: MONGO_URI
+                  valueFrom: { secretKeyRef: { name: erp-mongo-respaldo, key: uri } }
               volumeMounts: [{ name: trabajo, mountPath: /trabajo }]
               resources:
                 requests: { cpu: 100m, memory: 256Mi }

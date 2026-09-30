@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: erp-mongo
+spec:
+  template:
+    spec:
+      initContainers:
+        # mongod rechaza un keyfile legible por el grupo, y un Secret montado
+        # pertenece a root (el pod corre como 999): con defaultMode 0440 el grupo
+        # (fsGroup 999) lo lee, se copia a un emptyDir propio y se deja en 0400.
+        - name: preparar-keyfile
+          image: mongo:7
+          command:
+            - sh
+            - -c
+            - cp /secreto-keyfile/keyfile /keyfile/keyfile && chmod 0400 /keyfile/keyfile && echo "[keyfile] listo"
+          volumeMounts:
+            - { name: secreto-keyfile, mountPath: /secreto-keyfile, readOnly: true }
+            - { name: keyfile, mountPath: /keyfile }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      containers:
+        - name: mongo
+          # --keyFile activa la autenticacion (y la interna del replica set).
+          args: ["--replSet", "rs0", "--bind_ip_all", "--keyFile", "/keyfile/keyfile"]
+          env:
+            - name: MONGO_ADMIN_USER
+              valueFrom: { secretKeyRef: { name: erp-mongo-admin, key: username } }
+            - name: MONGO_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: erp-mongo-admin, key: password } }
+          volumeMounts:
+            - { name: keyfile, mountPath: /keyfile }
+          lifecycle:
+            postStart:
+              exec:
+                # El mismo arranque idempotente del replica set de base
+                # (ver la explicacion alli), ahora autenticado: rs.status() exige
+                # usuario. El ping no lo exige.
+                command:
+                  - sh
+                  - -c
+                  - |
+                    exec >>/proc/1/fd/1 2>&1
+                    echo "[rs-init] esperando a que mongod acepte conexiones"
+                    for i in $(seq 1 60); do
+                      mongosh --quiet --eval 'db.adminCommand({ping:1})' >/dev/null 2>&1 && break
+                      sleep 2
+                    done
+                    for i in $(seq 1 90); do
+                      RES=$(mongosh --quiet -u "$MONGO_ADMIN_USER" -p "$MONGO_ADMIN_PASSWORD" --authenticationDatabase admin --eval '
+                        try {
+                          var s = rs.status();
+                          print("LISTO " + s.set + " estado=" + s.myState);
+                        } catch (e) {
+                          try {
+                            rs.initiate({_id:"rs0",members:[{_id:0,host:"erp-mongo-0.erp-mongo:27017"}]});
+                            print("INICIADO");
+                          } catch (e2) {
+                            print("PENDIENTE " + e2.codeName);
+                          }
+                        }' 2>&1 | tail -1)
+                      echo "[rs-init] intento $i: $RES"
+                      case "$RES" in
+                        LISTO*|INICIADO*) echo "[rs-init] replica set operativo"; break ;;
+                      esac
+                      sleep 5
+                    done
+                    exit 0
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - mongosh --quiet -u "$MONGO_ADMIN_USER" -p "$MONGO_ADMIN_PASSWORD" --authenticationDatabase admin --eval 'quit(rs.status().myState === 1 ? 0 : 1)'
+      volumes:
+        - name: secreto-keyfile
+          secret: { secretName: erp-mongo-keyfile, defaultMode: 0440 }
+        - name: keyfile
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }

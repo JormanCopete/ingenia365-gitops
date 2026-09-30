@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          # envFrom es una lista sin clave de mezcla: se reemplaza entera, por eso
+          # repite el ConfigMap de base. El Secret trae las variables
+          # AuditSignature__* (claves propias de firma del ambiente).
+          envFrom:
+            - configMapRef: { name: erp-config }
+            - secretRef: { name: erp-audit-signature }
+          env:
+            # La cadena de conexion lleva usuario y clave: sale del Secret y ya no
+            # del manifiesto. value: null borra el valor abierto de base.
+            - name: MongoDb__ConnectionString
+              value: null
+              valueFrom: { secretKeyRef: { name: erp-mongo-api, key: uri } }
+            - name: ConnectionStrings__MongoDB
+              value: null
+              valueFrom: { secretKeyRef: { name: erp-mongo-api, key: uri } }

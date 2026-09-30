@@ -1,0 +1,44 @@
+# Auditoria protegida (feature 012 del ERP, T986).
+#
+# Dos cosas que hasta aqui estaban abiertas en los tres ambientes:
+#
+#   1. MongoDB corria SIN autenticacion (--replSet rs0 --bind_ip_all y la API
+#      entraba sin usuario). Con este componente mongod arranca con --keyFile,
+#      que activa la autenticacion, y cada consumidor entra con su usuario:
+#        - la API con erp-api, rol erp_auditoria_api: INSERTAR y LEER en las
+#          bases de auditoria, crear colecciones e indices. Nunca update ni
+#          remove: la auditoria es solo de agregar.
+#        - las sondas y el arranque del replica set con erp-admin.
+#        - los respaldos con erp-respaldo (rol backup; infrastructure/*/backup-mongo.yaml).
+#
+#   2. La API firmaba los PDF de auditoria (y firmaria las anclas de la cadena)
+#      con las claves de DESARROLLO, cuyos secretos estan en el repositorio del
+#      ERP. Con el Secret erp-audit-signature firma con claves propias del
+#      ambiente y deja de aceptar las de desarrollo.
+#
+# COMO SE ACTIVA EN UN OVERLAY (y solo cuando existan los Secrets):
+#   components:
+#     - ../../components/auditoria-protegida
+#
+# REQUISITOS, en este orden, desde el repositorio del ERP:
+#   1. tools/scripts/crear-secreto-firma-auditoria.ps1 -Ambiente <amb>
+#        -> Secret erp-audit-signature
+#   2. tools/scripts/preparar-autenticacion-mongo.ps1 -Ambiente <amb>
+#        -> usuarios en Mongo (que sigue abierto) y Secrets erp-mongo-keyfile,
+#           erp-mongo-admin, erp-mongo-api, erp-mongo-respaldo
+#   3. El respaldo del ambiente (infrastructure/<cluster>/backup-mongo.yaml) ya
+#      apuntando a erp-mongo-respaldo.
+# Sin los Secrets, Mongo no arranca (initContainer del keyfile) y la API tampoco
+# (secretKeyRef obligatorio): a proposito, un ambiente a medias no recibe trafico.
+#
+# UN AMBIENTE NUEVO (PVC vacio) se inicia SIN este componente: el replica set y
+# los usuarios se crean con Mongo abierto; despues se activa.
+#
+# Runbook: docs/operaciones/auditoria-cadena-de-sellos.md del ERP, seccion T986.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: mongo.yaml
+    target: { kind: StatefulSet, name: erp-mongo }
+  - path: api.yaml
+    target: { kind: Deployment, name: erp-api }
