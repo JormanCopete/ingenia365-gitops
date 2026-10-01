@@ -12,6 +12,9 @@ resources:
 # docs/operaciones/despliegue-adjuntos-directos.md.
 components:
   - ../../components/adjuntos-roles-anywhere
+  # T986 (feature 012 del ERP): Mongo con autenticacion y claves propias de firma
+  # de auditoria. Requiere los Secrets del componente (ver su cabecera).
+  - ../../components/auditoria-protegida
 # PRODUCCION: no se auto-migra (fail-fast si hay pendientes) y no lleva datos
 # demo. El esquema lo aplica el Job PreSync antes de rotar los pods.
 configMapGenerator:
