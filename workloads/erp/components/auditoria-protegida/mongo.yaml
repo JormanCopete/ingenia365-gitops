@@ -73,7 +73,10 @@ spec:
               command:
                 - sh
                 - -c
-                - mongosh --quiet -u "$MONGO_ADMIN_USER" -p "$MONGO_ADMIN_PASSWORD" --authenticationDatabase admin --eval 'quit(rs.status().myState === 1 ? 0 : 1)'
+                # Bloque literal: ' ? 0 : 1' lleva «dos puntos y espacio», que en un
+                # escalar plano YAML lee como un mapa (Argo no pudo compararlo).
+                - |-
+                  mongosh --quiet -u "$MONGO_ADMIN_USER" -p "$MONGO_ADMIN_PASSWORD" --authenticationDatabase admin --eval 'quit(rs.status().myState === 1 ? 0 : 1)'
       volumes:
         - name: secreto-keyfile
           secret: { secretName: erp-mongo-keyfile, defaultMode: 0440 }
