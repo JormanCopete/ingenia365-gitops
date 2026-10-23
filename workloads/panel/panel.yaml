@@ -1,0 +1,101 @@
+# Panel (gestión de clientes y cuentas por cobrar; repo JormanCopete/panel).
+#
+# Vive en el nodo de PRODUCCION, en su propio namespace. Hasta el 2026-10-23 corría
+# con docker compose en /opt/panel con Caddy delante en 0.0.0.0:443; tras el
+# reinicio del 19/10 Caddy no pudo tomar el 443 (Tailscale ya escuchaba en la IP
+# de la malla) y el sitio quedó caído. Ahora entra, como el ERP, por el túnel de
+# Cloudflare: panel.ingenia365.com -> http://panel.panel.svc.cluster.local:80.
+#
+# Requiere en el namespace panel (no van en Git):
+#   - Secret panel-env: ConnectionStrings__Default, Seed__AdminEmail, Seed__AdminPassword
+#   - Secret ghcr-pull: copia del de erp-pdn
+# La base sigue siendo el PostgreSQL NATIVO del host (db panel, usuario panel_app);
+# el pod la alcanza por la puerta de enlace de la red de pods (10.42.0.1), con su
+# línea en pg_hba.conf y su regla en ufw para 10.42.0.0/16.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: panel
+---
+# Llaves de DataProtection: cifran la contraseña SMTP y los tokens guardados. Se
+# copiaron una vez desde el volumen docker panel_panel-keys; perderlas obliga a
+# volver a digitar la configuración de correo de cada usuario.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: panel-keys
+  namespace: panel
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 100Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: panel
+  namespace: panel
+  labels: { app.kubernetes.io/name: panel }
+spec:
+  # UNA réplica y Recreate a propósito: la app migra la base al arrancar y corre un
+  # BackgroundService de recurrencia que, con dos réplicas, generaría las cuentas de
+  # cobro recurrentes dos veces. El volumen de llaves además es ReadWriteOnce.
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: { app.kubernetes.io/name: panel }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: panel }
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654          # usuario "app" de la imagen aspnet
+        fsGroup: 1654
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: panel
+          image: ghcr.io/jormancopete/panel:main
+          ports:
+            - { name: http, containerPort: 8080 }
+          envFrom:
+            - secretRef: { name: panel-env }
+          env:
+            - { name: ASPNETCORE_ENVIRONMENT, value: Production }
+            - { name: ASPNETCORE_FORWARDEDHEADERS_ENABLED, value: "true" }
+            - { name: DataProtection__KeysPath, value: /keys }
+            - { name: TZ, value: UTC }
+          volumeMounts:
+            - { name: keys, mountPath: /keys }
+          # La app no expone /health: se sondea el puerto.
+          startupProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 192Mi }
+            limits:   { cpu: "1", memory: 512Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: keys
+          persistentVolumeClaim: { claimName: panel-keys }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: panel
+  namespace: panel
+spec:
+  selector: { app.kubernetes.io/name: panel }
+  ports:
+    - { name: http, port: 80, targetPort: http }
