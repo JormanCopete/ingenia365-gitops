@@ -6,4 +6,4 @@ resources:
 # de cada corrida de main; se copia aquí y se sincroniza a mano en Argo CD.
 images:
   - name: ghcr.io/jormancopete/panel
-    digest: sha256:d9a5899192e366a2ed66e0c2e235a940a96182faf25158082b49e60bd284a241
+    digest: sha256:8e345343f0293ef0bf0280e8ef1a5a2a7c4e3ee4f28181496b0775527fa34200
