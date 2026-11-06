@@ -105,6 +105,25 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 2
+  # 2 GiB (2026-11-06, autorizado por el dueno): con 1 GiB los dos pods cayeron
+  # por OOMKilled al aplicar una plantilla de 11.949 personas, y en reposo ya
+  # rondaban los 800 MiB. Por nombre de contenedor, no por posicion: el
+  # componente de adjuntos agrega un sidecar. La cuota de disponibilidad.yaml
+  # sube a la par: sin eso el pod excedente de cada actualizacion no se crea.
+  - target: {kind: Deployment, name: erp-api}
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: erp-api
+      spec:
+        template:
+          spec:
+            containers:
+              - name: api
+                resources:
+                  limits:
+                    memory: 2Gi
   - target: {kind: Deployment, name: erp-web}
     patch: |-
       - op: replace

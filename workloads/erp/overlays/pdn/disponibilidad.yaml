@@ -49,7 +49,9 @@ spec:
     # 10Gi deja margen para el excedente de API y Web a la vez. No compromete al
     # nodo: Kubernetes programa por REQUESTS (3632Mi de ~10Gi asignables, 40%) y
     # los limites son un tope, no una reserva.
-    limits.memory: 10Gi
+    # 12Gi desde el 2026-11-06: con la API a 2 GiB los limites suman 9728Mi y el
+    # excedente de la API pide 2112Mi mas (API + sidecar) durante el relevo.
+    limits.memory: 12Gi
     persistentvolumeclaims: "10"
 ---
 # Todo contenedor que no declare un recurso recibe el valor de aqui: un pod mal
