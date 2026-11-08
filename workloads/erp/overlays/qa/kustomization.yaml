@@ -77,13 +77,13 @@ configMapGenerator:
 # vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:00dc18c995d70b9e690067a05697957643c952edf885bad38375cadeb1caa671
+    digest: sha256:691ae345be2b1702323e5f009f78def1693229e9919465035f0636b2c9f51ece
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:3679db3395ef25cf3741625f719872c40424623ae4217311f44b6b34ead754fe
+    digest: sha256:189e5ce2f2d55d24233b0ce46ec168c34093534cd5509157605d7820b6ec9f0b
   # Sidecar de credenciales (feature 011). El primer digest es el de develop
   # af84c24; desde ahi lo reescribe el CI como los demas.
   - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
-    digest: sha256:2b9f538d9fcbf406bc9f31974075b3b71d230fd353168e536801b4e0910fa071
+    digest: sha256:6aafd81abbb831d1bf3556014929e6d5d24218d42e327d3790f92c650bb6b298
 patches:
   - target: {kind: StatefulSet, name: erp-mongo}
     patch: |-
