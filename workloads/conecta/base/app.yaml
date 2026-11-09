@@ -23,6 +23,8 @@ spec:
       imagePullSecrets: [{ name: ghcr-pull }]
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1654          # usuario "app" de las imágenes .NET (USER app no es numérico)
+        runAsGroup: 1654
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: migrate
@@ -56,6 +58,8 @@ spec:
       imagePullSecrets: [{ name: ghcr-pull }]
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1654          # usuario "app" de las imágenes .NET (USER app no es numérico)
+        runAsGroup: 1654
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: api
@@ -141,6 +145,8 @@ spec:
       imagePullSecrets: [{ name: ghcr-pull }]
       securityContext:
         runAsNonRoot: true
+        runAsUser: 1654          # usuario "app" de las imágenes .NET (USER app no es numérico)
+        runAsGroup: 1654
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: workers
