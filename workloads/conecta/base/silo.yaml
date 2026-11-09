@@ -1,0 +1,121 @@
+# Custodia de Conecta en Silo (ADR-018: compatible con S3, Object Lock, AGPL): XML firmados, respuestas de la DIAN y
+# representaciones gráficas, conservados 5 años desde el 1 de enero del año siguiente (Res. 165/2023).
+#
+# OJO con el disco: local-path borra el volumen si se borra el PVC (reclaimPolicy Delete). En DEV y QA no importa; en
+# producción el PV se pasa a Retain al crearlo y la réplica a un segundo sitio es obligatoria (infra/minio/replicate.sh).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: conecta-silo
+  labels: { app.kubernetes.io/name: conecta-silo }
+spec:
+  serviceName: conecta-silo
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: conecta-silo }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-silo }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: silo
+          image: pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+          args: ["server", "/data", "--console-address", ":9001"]
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom: { secretKeyRef: { name: conecta-silo-root, key: username } }
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: conecta-silo-root, key: password } }
+            - { name: MINIO_REGION, value: us-east-1 }
+            - { name: MINIO_PROMETHEUS_AUTH_TYPE, value: public }
+            - { name: MINIO_BROWSER, value: "off" }
+            # Sin usuario en /etc/passwd: el directorio de certificados (~/.minio) va a /tmp.
+            - { name: HOME, value: /tmp }
+            - { name: TZ, value: America/Bogota }
+          ports:
+            - { name: s3, containerPort: 9000 }
+          readinessProbe:
+            httpGet: { path: /minio/health/ready, port: s3 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /minio/health/live, port: s3 }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 50m, memory: 192Mi }
+            limits:   { memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 10Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conecta-silo
+spec:
+  selector: { app.kubernetes.io/name: conecta-silo }
+  ports:
+    - { name: s3, port: 9000, targetPort: s3 }
+---
+# Buckets con Object Lock y el usuario conecta-app (lee, escribe y fija retención; no borra). Es idempotente y corre en
+# cada sincronización: scripts/init-buckets.sh es copia de infra/minio/init-buckets.sh del repo de Conecta.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: conecta-silo-init
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-silo-init }
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: init
+          image: pgsty/silo@sha256:7bb2aff6b89efe1cb1303c10fc21d579447434ed06649ac9ec05a5e2dbf30ad7
+          command: ["/bin/sh", "/scripts/init-buckets.sh"]
+          env:
+            - { name: MINIO_ENDPOINT, value: "http://conecta-silo:9000" }
+            - { name: HOME, value: /tmp }
+            - name: MINIO_ROOT_USER
+              valueFrom: { secretKeyRef: { name: conecta-silo-root, key: username } }
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: conecta-silo-root, key: password } }
+            - name: MINIO_APP_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: conecta-silo-app, key: username } }
+            - name: MINIO_APP_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: conecta-silo-app, key: password } }
+            - name: MINIO_LOCK_MODE
+              valueFrom: { configMapKeyRef: { name: conecta-env, key: CUSTODY_LOCK_MODE } }
+            - { name: MINIO_RETENTION_DAYS, value: "2190" }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits:   { memory: 128Mi }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts, readOnly: true }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: scripts
+          configMap: { name: conecta-scripts }

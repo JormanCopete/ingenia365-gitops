@@ -1,0 +1,104 @@
+# Vault de Conecta (ADR-006): la clave privada de firma de cada cliente (Transit), el PIN del software, las claves
+# técnicas, los secretos de webhooks, la clave VAPID y la de sellado de la auditoría. Nada de eso existe fuera de Vault.
+#
+# Un nodo con almacenamiento Raft integrado. Arranca SELLADO: la inicialización (una sola vez) y la configuración de
+# motores, políticas y AppRole las hace tools/k8s/bootstrap.sh del repo de Conecta. Cómo se abre el sello depende del
+# ambiente: en DEV y QA lo hace el componente vault-unseal-nonprod; en producción, una persona (o auto-unseal).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: conecta-vault-config
+data:
+  vault.hcl: |
+    ui            = false
+    disable_mlock = true
+    api_addr      = "http://conecta-vault:8200"
+    cluster_addr  = "http://conecta-vault-0.conecta-vault-internal:8201"
+
+    listener "tcp" {
+      address         = "0.0.0.0:8200"
+      cluster_address = "0.0.0.0:8201"
+      # Solo tráfico dentro del namespace (ver la NetworkPolicy); el túnel nunca enruta a Vault.
+      tls_disable     = 1
+    }
+
+    storage "raft" {
+      path    = "/vault/data"
+      node_id = "conecta-vault-0"
+    }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: conecta-vault
+  labels: { app.kubernetes.io/name: conecta-vault }
+spec:
+  serviceName: conecta-vault-internal
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: conecta-vault }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-vault }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.20
+          command: ["vault", "server", "-config=/vault/config/vault.hcl"]
+          env:
+            - { name: VAULT_ADDR, value: "http://127.0.0.1:8200" }
+            - { name: SKIP_SETCAP, value: "true" }
+          ports:
+            - { name: http, containerPort: 8200 }
+            - { name: cluster, containerPort: 8201 }
+          # Listo = abierto. Sellado no recibe tráfico, pero no se reinicia (liveness acepta sellado y sin inicializar).
+          readinessProbe:
+            httpGet: { path: /v1/sys/health, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: "/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true", port: http }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits:   { memory: 256Mi }
+          volumeMounts:
+            - { name: config, mountPath: /vault/config, readOnly: true }
+            - { name: data, mountPath: /vault/data }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: config
+          configMap: { name: conecta-vault-config }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conecta-vault
+spec:
+  selector: { app.kubernetes.io/name: conecta-vault }
+  ports:
+    - { name: http, port: 8200, targetPort: http }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conecta-vault-internal
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/name: conecta-vault }
+  ports:
+    - { name: http, port: 8200, targetPort: http }
+    - { name: cluster, port: 8201, targetPort: cluster }

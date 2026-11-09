@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: conecta-vault
+spec:
+  template:
+    spec:
+      containers:
+        - name: unseal
+          image: hashicorp/vault:1.20
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                if [ -f /unseal/key ] && vault status -format=json 2>/dev/null | grep -q '"sealed": true'; then
+                  vault operator unseal "$(cat /unseal/key)" >/dev/null && echo "[unseal] sello abierto"
+                fi
+                sleep 15
+              done
+          env:
+            - { name: VAULT_ADDR, value: "http://127.0.0.1:8200" }
+            - { name: HOME, value: /tmp }
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits:   { memory: 64Mi }
+          volumeMounts:
+            - { name: unseal, mountPath: /unseal, readOnly: true }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: unseal
+          secret:
+            secretName: conecta-vault-unseal
+            optional: true
+            items: [{ key: key, path: key }]

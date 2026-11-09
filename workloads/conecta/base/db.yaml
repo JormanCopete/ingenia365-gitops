@@ -1,0 +1,68 @@
+# PostgreSQL de Conecta, gobernado por CloudNativePG (el mismo operador del ERP, en cnpg-system).
+#
+# Reproduce infra/postgres/init/01-init.sh del repo de Conecta (ADR-001):
+#   - conecta_migrator: dueño de la base y del esquema `conecta`; solo lo usa el Job de migraciones.
+#   - conecta_app: rol de la API y los workers, SIN BYPASSRLS: queda sujeto a Row-Level Security por tenant.
+#   - keycloak: dueño de la base `keycloak`, aislada de la de negocio.
+# Las contraseñas viven en Secrets que crea tools/k8s/bootstrap.sh del repo de Conecta (nunca en Git).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: conecta-db
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  storage:
+    size: 5Gi
+  resources:
+    requests: { cpu: 50m, memory: 192Mi }
+    limits:   { memory: 512Mi }
+  postgresql:
+    parameters:
+      shared_buffers: 64MB
+      max_connections: "60"
+      timezone: America/Bogota
+  bootstrap:
+    initdb:
+      database: conecta
+      owner: conecta_migrator
+      secret: { name: conecta-db-migrator }
+      postInitApplicationSQL:
+        # Los roles se crean aquí para poder darles permisos; su contraseña y LOGIN los pone managed.roles.
+        - CREATE ROLE conecta_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS
+        - CREATE ROLE keycloak NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE
+        - CREATE EXTENSION IF NOT EXISTS pg_stat_statements
+        - CREATE EXTENSION IF NOT EXISTS pgcrypto
+        - CREATE SCHEMA conecta AUTHORIZATION conecta_migrator
+        - REVOKE ALL ON SCHEMA public FROM PUBLIC
+        - GRANT USAGE ON SCHEMA conecta TO conecta_app
+        - ALTER DEFAULT PRIVILEGES FOR ROLE conecta_migrator IN SCHEMA conecta GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO conecta_app
+        - ALTER DEFAULT PRIVILEGES FOR ROLE conecta_migrator IN SCHEMA conecta GRANT USAGE, SELECT ON SEQUENCES TO conecta_app
+        # Valor vacío por defecto: ninguna política RLS coincide y no se ve ninguna fila (fail-closed).
+        - ALTER DATABASE conecta SET app.tenant_id = ''
+        - ALTER DATABASE conecta SET timezone = 'America/Bogota'
+        - >-
+          CREATE OR REPLACE FUNCTION conecta.current_tenant_id() RETURNS uuid LANGUAGE sql STABLE PARALLEL SAFE
+          AS $$ SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid $$
+        - ALTER FUNCTION conecta.current_tenant_id() OWNER TO conecta_migrator
+        - GRANT EXECUTE ON FUNCTION conecta.current_tenant_id() TO conecta_app
+  managed:
+    roles:
+      - name: conecta_app
+        ensure: present
+        login: true
+        bypassrls: false
+        passwordSecret: { name: conecta-db-app }
+      - name: keycloak
+        ensure: present
+        login: true
+        passwordSecret: { name: conecta-db-keycloak }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: conecta-db-keycloak
+spec:
+  name: keycloak
+  owner: keycloak
+  cluster: { name: conecta-db }

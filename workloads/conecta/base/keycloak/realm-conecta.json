@@ -1,0 +1,480 @@
+{
+  "realm": "conecta",
+  "displayName": "IngenIA Conecta",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "accessTokenLifespan": 900,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
+  "offlineSessionIdleTimeout": 2592000,
+  "accessCodeLifespan": 60,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "defaultSignatureAlgorithm": "RS256",
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "es",
+    "en"
+  ],
+  "defaultLocale": "es",
+  "passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(5)",
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 10
+    },
+    {
+      "alias": "webauthn-register",
+      "name": "Webauthn Register",
+      "providerId": "webauthn-register",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 20
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "Owner",
+        "description": "Propietario del tenant: administra todo, incluida la facturación del servicio."
+      },
+      {
+        "name": "Admin",
+        "description": "Administra usuarios, credenciales DIAN, numeración y webhooks del tenant."
+      },
+      {
+        "name": "Operator",
+        "description": "Emite documentos y consulta la bandeja."
+      },
+      {
+        "name": "Viewer",
+        "description": "Solo lectura de documentos y trazabilidad."
+      },
+      {
+        "name": "Auditor",
+        "description": "Solo lectura del audit log y de la trazabilidad."
+      },
+      {
+        "name": "platform-admin",
+        "description": "Administrador de la plataforma IngenIA365 (crea organizaciones y tenants)."
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "roles",
+      "description": "Roles de realm en realm_access.roles (RBAC por tenant, Parte VII.2).",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "description": "Correo y verificación.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "email verified",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "emailVerified",
+            "claim.name": "email_verified",
+            "jsonType.label": "boolean",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "Datos básicos del usuario (nombre y preferred_username). Un realm importado desde JSON no trae los scopes estándar: se declaran aquí.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "given name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "firstName",
+            "claim.name": "given_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "family name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "lastName",
+            "claim.name": "family_name",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "documents:write",
+      "description": "Crear documentos electrónicos (facturas, notas, nómina, DS, DEE, eventos).",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "documents:read",
+      "description": "Consultar documentos, artefactos y trazabilidad.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "tenants:admin",
+      "description": "Administrar tenants, certificados, credenciales DIAN y numeración.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
+      "name": "conecta-api-audience",
+      "description": "Agrega aud=conecta-api al token.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "conecta-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "conecta-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tenant-scope",
+      "description": "Lista de tenants (UUID) que el cliente o usuario puede operar. Atributo tenant_scope.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant_scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "tenant_scope",
+            "claim.name": "tenant_scope",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "conecta-api",
+      "name": "IngenIA Conecta API (recurso)",
+      "description": "Recurso protegido: api.conecta.ingenia365.com. No inicia sesiones; solo valida tokens con aud=conecta-api.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "conecta-dashboard",
+      "name": "IngenIA Conecta Dashboard (PWA)",
+      "description": "Cliente público del dashboard React: Authorization Code + PKCE (S256). Tokens en memoria.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "/",
+      "redirectUris": [
+        "${CONECTA_PUBLIC_URL}/*"
+      ],
+      "webOrigins": [
+        "${CONECTA_PUBLIC_URL}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${CONECTA_PUBLIC_URL}/*",
+        "access.token.lifespan": "900"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles",
+        "conecta-api-audience",
+        "tenant-scope",
+        "documents:read"
+      ],
+      "optionalClientScopes": [
+        "documents:write",
+        "tenants:admin"
+      ]
+    },
+    {
+      "clientId": "erp-ingenia365",
+      "name": "ERP IngenIA365 (M2M)",
+      "description": "Primer cliente de la API: OAuth 2.0 Client Credentials. El secreto de este archivo es SOLO de desarrollo; rotar en cada ambiente.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KC_SECRET_ERP_INGENIA365}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "900",
+        "use.refresh.tokens": "false"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "roles",
+        "conecta-api-audience",
+        "tenant-scope",
+        "documents:read",
+        "documents:write"
+      ],
+      "optionalClientScopes": [
+        "tenants:admin"
+      ]
+    },
+    {
+      "clientId": "conecta-habilitacion",
+      "name": "Habilitación DIAN (plataforma)",
+      "description": "Alta de tenants y set de pruebas (tools/habilitacion). Rol platform-admin: opera cualquier tenant. Secreto SOLO de desarrollo; rotar en cada ambiente.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KC_SECRET_CONECTA_HABILITACION}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "900",
+        "use.refresh.tokens": "false"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "roles",
+        "conecta-api-audience",
+        "tenant-scope",
+        "documents:read",
+        "documents:write",
+        "tenants:admin"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "conecta-platform",
+      "name": "IngenIA Conecta (administración del realm)",
+      "description": "Cuenta de servicio con la que la API gestiona usuarios y clientes del tenant (Parte VIII.8) a través de la Admin REST API. Secreto SOLO de desarrollo; en producción por Vault/variables de entorno.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KC_SECRET_CONECTA_PLATFORM}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "300",
+        "use.refresh.tokens": "false"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "roles"
+      ],
+      "optionalClientScopes": []
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-erp-ingenia365",
+      "enabled": true,
+      "serviceAccountClientId": "erp-ingenia365",
+      "attributes": {
+        "tenant_scope": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      },
+      "realmRoles": [
+        "Operator"
+      ]
+    },
+    {
+      "username": "service-account-conecta-platform",
+      "enabled": true,
+      "serviceAccountClientId": "conecta-platform",
+      "clientRoles": {
+        "realm-management": [
+          "view-users",
+          "query-users",
+          "manage-users",
+          "view-clients",
+          "query-clients",
+          "manage-clients",
+          "view-realm"
+        ]
+      }
+    },
+    {
+      "username": "service-account-conecta-habilitacion",
+      "enabled": true,
+      "serviceAccountClientId": "conecta-habilitacion",
+      "realmRoles": [
+        "platform-admin"
+      ]
+    }
+  ],
+  "attributes": {
+    "userProfileEnabled": "true"
+  },
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"tenant_scope\", \"displayName\": \"Tenants operables (UUID)\", \"validations\": {\"pattern\": {\"pattern\": \"^[0-9a-fA-F-]{36}$\", \"error-message\": \"Debe ser un UUID\"}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": true}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}]}"
+          ]
+        }
+      }
+    ]
+  },
+  "defaultDefaultClientScopes": [
+    "profile",
+    "email",
+    "roles",
+    "tenant-scope"
+  ],
+  "defaultOptionalClientScopes": [
+    "offline_access"
+  ]
+}

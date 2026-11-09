@@ -1,0 +1,49 @@
+# Conecta (repo JormanCopete/Conecta365) en el clúster de pruebas, con el mismo criterio que el ERP:
+# DEV sincroniza solo y revierte cambios a mano (selfHeal); QA sincroniza solo pero se puede congelar durante una
+# certificación. Los namespaces y sus Secrets los crea antes tools/k8s/bootstrap.sh del repo de Conecta.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: conecta-dev
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: workloads/conecta/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: conecta-dev
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=false, ServerSideApply=true]
+  # Ver erp-dev-qa.yaml: volumeClaimTemplates es inmutable y Kubernetes le agrega campos propios.
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers: ["/spec/volumeClaimTemplates"]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: conecta-qa
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: workloads/conecta/overlays/qa
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: conecta-qa
+  syncPolicy:
+    automated: { prune: true, selfHeal: false }
+    syncOptions: [CreateNamespace=false, ServerSideApply=true]
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers: ["/spec/volumeClaimTemplates"]

@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: conecta-qa
+resources:
+  - ../../base
+components:
+  - ../../components/vault-unseal-nonprod
+configMapGenerator:
+  - name: conecta-env
+    literals:
+      - CONECTA_PUBLIC_URL=https://conecta-qa.ingenia365.com
+      # Staging y no Development: sin los perfiles fijos de appsettings.Development.json, pero con la documentación
+      # interactiva de la API (/scalar) que producción no publica.
+      - ASPNETCORE_ENVIRONMENT=Staging
+      # GOVERNANCE en DEV y QA: un administrador puede borrar lo que se suba por error. Producción usa compliance.
+      - CUSTODY_LOCK_MODE=governance
+  - name: conecta-config
+    behavior: merge
+    literals:
+      - Serilog__MinimumLevel__Default=Information
+# Imágenes por DIGEST: las reescribe el job "gitops" del CI de Conecta365 en cada push a develop. Cambiar el digest ES
+# el despliegue; para volver atrás se revierte el commit.
+images:
+  - name: ghcr.io/jormancopete/conecta-api
+    newTag: develop
+  - name: ghcr.io/jormancopete/conecta-workers
+    newTag: develop
+  - name: ghcr.io/jormancopete/conecta-dashboard
+    newTag: develop
+  - name: ghcr.io/jormancopete/conecta-migrator
+    newTag: develop
+patches:
+  - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: conecta }
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`conecta-qa.ingenia365.com`) && (PathPrefix(`/v1`) || PathPrefix(`/health`))
+      - op: replace
+        path: /spec/routes/1/match
+        value: Host(`conecta-qa.ingenia365.com`) && (PathPrefix(`/auth/realms`) || PathPrefix(`/auth/resources`))
+      - op: replace
+        path: /spec/routes/2/match
+        value: Host(`conecta-qa.ingenia365.com`) && PathPrefix(`/`)

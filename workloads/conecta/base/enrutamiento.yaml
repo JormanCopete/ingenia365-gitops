@@ -1,0 +1,90 @@
+# Entrada única por ambiente, como la del ERP: un solo host sirve el dashboard (/), la API (/v1, /health) y Keycloak
+# (/auth). Cero CORS y una sola imagen del dashboard para todos los ambientes. El host lo pone cada overlay con Host():
+# en nonprod el mismo Traefik recibe app-dev, app-qa, conecta-dev y conecta-qa, y sin Host() las rutas se pisan.
+#
+# De Keycloak solo pasan /auth/realms (login, tokens, claves) y /auth/resources (estáticos): la consola de
+# administración no existe desde internet.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: conecta-security-headers
+spec:
+  headers:
+    stsSeconds: 0                      # HSTS lo gobierna Cloudflare
+    contentTypeNosniff: true
+    referrerPolicy: strict-origin-when-cross-origin
+    customResponseHeaders:
+      X-Powered-By: ""
+      Server: ""
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: conecta
+spec:
+  entryPoints: [web]                   # cloudflared entra por HTTP dentro del clúster; el TLS externo lo da el túnel
+  routes:
+    - kind: Rule
+      match: PathPrefix(`/v1`) || PathPrefix(`/health`)
+      priority: 100
+      services:
+        - { name: conecta-api, port: 80 }
+      middlewares:
+        - { name: conecta-security-headers }
+    - kind: Rule
+      match: PathPrefix(`/auth/realms`) || PathPrefix(`/auth/resources`)
+      priority: 90
+      services:
+        - { name: conecta-keycloak, port: 8080 }
+      middlewares:
+        - { name: conecta-security-headers }
+    - kind: Rule
+      match: PathPrefix(`/`)
+      priority: 1
+      services:
+        - { name: conecta-dashboard, port: 80 }
+      middlewares:
+        - { name: conecta-security-headers }
+---
+# Nadie fuera del namespace llega a la base, Vault o Silo. Solo Traefik (kube-system) entra, y solo a lo que publica la
+# ruta; el monitoreo puede leer métricas.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: conecta-default
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: conecta-from-traefik
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/name, operator: In, values: [conecta-api, conecta-keycloak, conecta-dashboard] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+---
+# El operador de CloudNativePG administra la instancia por su puerto de estado (8000) y por PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: conecta-db-from-operator
+spec:
+  podSelector:
+    matchLabels: { cnpg.io/cluster: conecta-db }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: cnpg-system }

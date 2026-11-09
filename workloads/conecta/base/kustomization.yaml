@@ -1,0 +1,52 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base común de los ambientes de Conecta (repo JormanCopete/Conecta365). Lo que varía (host, ambiente, modo de
+# bloqueo de la custodia, imágenes) va en overlays/{dev,qa,pdn}.
+resources:
+  - db.yaml
+  - keycloak.yaml
+  - vault.yaml
+  - silo.yaml
+  - app.yaml
+  - enrutamiento.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: conecta
+      app.kubernetes.io/managed-by: argocd
+    includeSelectors: false
+
+configMapGenerator:
+  # Configuración no secreta común a la API y los workers.
+  - name: conecta-config
+    literals:
+      - TZ=America/Bogota
+      - DOTNET_gcServer=0                       # memoria ajustada: GC de estación de trabajo
+      - Vault__Address=http://conecta-vault:8200
+      - Minio__Endpoint=conecta-silo:9000
+      - Minio__Bucket=conecta-documents
+      # Los tenants se dan de alta por la API; nunca el perfil fijo de desarrollo.
+      - Dian__DevelopmentTenant__Enabled=false
+      # La emisión automática en contingencia sigue apagada hasta la habilitación.
+      - DianContingency__AutoIssue=false
+      # cloudflared y Traefik corren en la red de pods: la IP del cliente sale de X-Forwarded-For (ver ReverseProxy.cs).
+      - ReverseProxy__TrustedNetworks__0=10.42.0.0/16
+      - Serilog__MinimumLevel__Default=Information
+  - name: conecta-keycloak-realm
+    files:
+      - keycloak/realm-conecta.json
+  - name: conecta-scripts
+    files:
+      - scripts/init-buckets.sh
+
+images:
+  # Las fija por digest el CI de Conecta365 (job gitops); hasta la primera publicación, la etiqueta develop.
+  - name: ghcr.io/jormancopete/conecta-api
+    newTag: develop
+  - name: ghcr.io/jormancopete/conecta-workers
+    newTag: develop
+  - name: ghcr.io/jormancopete/conecta-dashboard
+    newTag: develop
+  - name: ghcr.io/jormancopete/conecta-migrator
+    newTag: develop

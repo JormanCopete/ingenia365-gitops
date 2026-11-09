@@ -17,6 +17,8 @@ workloads/
     base/                    manifiestos comunes a los 3 ambientes
     overlays/{dev,qa,pdn}/   lo que cambia por ambiente
   panel/                     panel.ingenia365.com (migrado desde Docker)
+  conecta/                   IngenIA Conecta (facturación electrónica; repo JormanCopete/Conecta365).
+                             Alta de ambientes y flujo: tools/k8s/README.md de ese repo
 infrastructure/
   {pdn,nonprod}/             backups (ObjectStore, ScheduledBackup), alertas
 docs/                        runbooks

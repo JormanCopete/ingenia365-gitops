@@ -1,0 +1,10 @@
+# SOLO DEV y QA: abre el sello de Vault al arrancar con la clave guardada en el Secret conecta-vault-unseal.
+#
+# Guardar la clave de apertura junto al Vault anula buena parte de su protección, y por eso este componente NO va en
+# producción. En DEV y QA se acepta: solo hay certificados de prueba, y sin esto cada reinicio del nodo dejaría los dos
+# ambientes sin firmar hasta que alguien entrara a abrir el sello a mano.
+# El Secret lo crea tools/k8s/bootstrap.sh (repo de Conecta) al inicializar Vault; si falta, el sidecar solo espera.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: unseal.yaml

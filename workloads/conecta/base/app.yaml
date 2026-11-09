@@ -1,0 +1,222 @@
+# Aplicación Conecta: migraciones, API, workers y dashboard. Las imágenes van por DIGEST: las escribe el job "gitops"
+# del CI de JormanCopete/Conecta365 en cada overlay.
+#
+# Migraciones: Job con el bundle de EF Core y el rol conecta_migrator. La API y los workers nunca migran (corren con
+# conecta_app, sin permisos de DDL). Va como hook Sync y no PreSync: en la primera sincronización la base todavía no
+# existe y un PreSync esperaría para siempre; mientras tanto la API no está lista (/health/ready lee una tabla) y no
+# recibe tráfico.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: conecta-migrate
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-migrate }
+    spec:
+      restartPolicy: OnFailure
+      imagePullSecrets: [{ name: ghcr-pull }]
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: ghcr.io/jormancopete/conecta-migrator
+          env:
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: conecta-db-migrator, key: password } }
+            - name: CONECTA_MIGRATIONS_CONNECTION
+              value: "Host=conecta-db-rw;Port=5432;Database=conecta;Username=conecta_migrator;Password=$(DB_PASSWORD);Timeout=30"
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { memory: 256Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conecta-api
+  labels: { app.kubernetes.io/name: conecta-api }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: conecta-api }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-api }
+    spec:
+      imagePullSecrets: [{ name: ghcr-pull }]
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: ghcr.io/jormancopete/conecta-api
+          envFrom:
+            - configMapRef: { name: conecta-config }
+          env:
+            - name: CONECTA_PUBLIC_URL
+              valueFrom: { configMapKeyRef: { name: conecta-env, key: CONECTA_PUBLIC_URL } }
+            - name: ASPNETCORE_ENVIRONMENT
+              valueFrom: { configMapKeyRef: { name: conecta-env, key: ASPNETCORE_ENVIRONMENT } }
+            - name: Minio__RetentionMode
+              valueFrom: { configMapKeyRef: { name: conecta-env, key: CUSTODY_LOCK_MODE } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: conecta-db-app, key: password } }
+            - name: ConnectionStrings__Conecta
+              value: "Host=conecta-db-rw;Port=5432;Database=conecta;Username=conecta_app;Password=$(DB_PASSWORD);Maximum Pool Size=20"
+            # El token lo emite Keycloak con la URL pública; los metadatos y las claves se leen por la red interna.
+            - { name: Auth__Authority, value: "$(CONECTA_PUBLIC_URL)/auth/realms/conecta" }
+            - { name: Auth__MetadataAddress, value: "http://conecta-keycloak:8080/auth/realms/conecta/.well-known/openid-configuration" }
+            - { name: Auth__RequireHttpsMetadata, value: "false" }
+            - { name: Keycloak__Admin__BaseUrl, value: "http://conecta-keycloak:8080/auth" }
+            - name: Keycloak__Admin__ClientSecret
+              valueFrom: { secretKeyRef: { name: conecta-keycloak-clients, key: KC_SECRET_CONECTA_PLATFORM } }
+            - name: Vault__RoleId
+              valueFrom: { secretKeyRef: { name: conecta-vault-approle, key: role_id } }
+            - name: Vault__SecretId
+              valueFrom: { secretKeyRef: { name: conecta-vault-approle, key: secret_id } }
+            - name: Minio__AccessKey
+              valueFrom: { secretKeyRef: { name: conecta-silo-app, key: username } }
+            - name: Minio__SecretKey
+              valueFrom: { secretKeyRef: { name: conecta-silo-app, key: password } }
+          ports:
+            - { name: http, containerPort: 8080 }
+          startupProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: { path: /health/live, port: http }
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /health/ready, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 192Mi }
+            limits:   { memory: 512Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conecta-api
+spec:
+  selector: { app.kubernetes.io/name: conecta-api }
+  ports:
+    - { name: http, port: 80, targetPort: http }
+---
+# Workers: outbox (envío a la DIAN, correo, webhooks), conciliación y alertas. Una réplica: los trabajos toman sus
+# mensajes con bloqueo en la base, pero no hace falta más con el volumen actual.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conecta-workers
+  labels: { app.kubernetes.io/name: conecta-workers }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: conecta-workers }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-workers }
+    spec:
+      imagePullSecrets: [{ name: ghcr-pull }]
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: workers
+          image: ghcr.io/jormancopete/conecta-workers
+          envFrom:
+            - configMapRef: { name: conecta-config }
+          env:
+            - name: DOTNET_ENVIRONMENT
+              valueFrom: { configMapKeyRef: { name: conecta-env, key: ASPNETCORE_ENVIRONMENT } }
+            - name: Minio__RetentionMode
+              valueFrom: { configMapKeyRef: { name: conecta-env, key: CUSTODY_LOCK_MODE } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: conecta-db-app, key: password } }
+            - name: ConnectionStrings__Conecta
+              value: "Host=conecta-db-rw;Port=5432;Database=conecta;Username=conecta_app;Password=$(DB_PASSWORD);Maximum Pool Size=10"
+            - name: Vault__RoleId
+              valueFrom: { secretKeyRef: { name: conecta-vault-approle, key: role_id } }
+            - name: Vault__SecretId
+              valueFrom: { secretKeyRef: { name: conecta-vault-approle, key: secret_id } }
+            - name: Minio__AccessKey
+              valueFrom: { secretKeyRef: { name: conecta-silo-app, key: username } }
+            - name: Minio__SecretKey
+              valueFrom: { secretKeyRef: { name: conecta-silo-app, key: password } }
+          resources:
+            requests: { cpu: 50m, memory: 160Mi }
+            limits:   { memory: 384Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conecta-dashboard
+  labels: { app.kubernetes.io/name: conecta-dashboard }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: conecta-dashboard }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: conecta-dashboard }
+    spec:
+      imagePullSecrets: [{ name: ghcr-pull }]
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: dashboard
+          image: ghcr.io/jormancopete/conecta-dashboard
+          ports:
+            - { name: http, containerPort: 8080 }
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits:   { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: conecta-dashboard
+spec:
+  selector: { app.kubernetes.io/name: conecta-dashboard }
+  ports:
+    - { name: http, port: 80, targetPort: http }
