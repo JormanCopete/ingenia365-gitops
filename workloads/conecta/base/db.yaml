@@ -41,9 +41,11 @@ spec:
         # Valor vacío por defecto: ninguna política RLS coincide y no se ve ninguna fila (fail-closed).
         - ALTER DATABASE conecta SET app.tenant_id = ''
         - ALTER DATABASE conecta SET timezone = 'America/Bogota'
+        # Cuerpo entre comillas simples y no $$: el operador ejecuta estas sentencias con el protocolo extendido, que
+        # toma el $ como marcador de parámetro.
         - >-
           CREATE OR REPLACE FUNCTION conecta.current_tenant_id() RETURNS uuid LANGUAGE sql STABLE PARALLEL SAFE
-          AS $$ SELECT NULLIF(current_setting('app.tenant_id', true), '')::uuid $$
+          AS 'SELECT NULLIF(current_setting(''app.tenant_id'', true), '''')::uuid'
         - ALTER FUNCTION conecta.current_tenant_id() OWNER TO conecta_migrator
         - GRANT EXECUTE ON FUNCTION conecta.current_tenant_id() TO conecta_app
   managed:
