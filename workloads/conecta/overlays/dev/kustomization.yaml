@@ -17,6 +17,9 @@ configMapGenerator:
   - name: conecta-config
     behavior: merge
     literals:
+      # NIT de MUESTRA, el mismo de appsettings.Development.json: el real de IngenIA365 SAS está por confirmar
+      # (docs/guias/carga-habilitacion-dian.md). Sin él la API no arranca. Producción lleva el real.
+      - Rendering__Manufacturer__Nit=800197268
       - Serilog__MinimumLevel__Default=Debug
 # Imágenes por DIGEST: las reescribe el job "gitops" del CI de Conecta365 en cada push a develop. Cambiar el digest ES
 # el despliegue; para volver atrás se revierte el commit.
