@@ -26,6 +26,10 @@ spec:
     initdb:
       database: conecta
       owner: conecta_migrator
+      # Valores por omisión del operador, declarados para que Argo CD no vea una diferencia permanente.
+      encoding: UTF8
+      localeCType: C
+      localeCollate: C
       secret: { name: conecta-db-migrator }
       postInitApplicationSQL:
         # Los roles se crean aquí para poder darles permisos; su contraseña y LOGIN los pone managed.roles.
@@ -54,10 +58,14 @@ spec:
         ensure: present
         login: true
         bypassrls: false
+        inherit: true
+        connectionLimit: -1
         passwordSecret: { name: conecta-db-app }
       - name: keycloak
         ensure: present
         login: true
+        inherit: true
+        connectionLimit: -1
         passwordSecret: { name: conecta-db-keycloak }
 ---
 apiVersion: postgresql.cnpg.io/v1
