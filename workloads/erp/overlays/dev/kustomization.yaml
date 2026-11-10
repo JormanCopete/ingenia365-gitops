@@ -55,13 +55,13 @@ configMapGenerator:
 # vieja hasta que alguien hacia rollout restart. Tres veces en produccion.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:76533e2938acb4f186b898a314c840c3179b98684129f138474f0d9b7135255d
+    digest: sha256:0d67b77a9122cec84ab8dac3db7a3796f78d369d250f30fa3ed33092d603fde6
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:6d119dabdab441876f96ca043835ad3c7a800925cbb44868929063ddcd625956
+    digest: sha256:25b4aad0d97fd0b5159dfaa630ea23ecbdf78d0f04db9331672a5442228f8e4f
   # Sidecar de credenciales (feature 011). El primer digest es el de develop
   # af84c24; desde ahi lo reescribe el CI como los demas.
   - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
-    digest: sha256:54072c684f94210e80c2734101c621bee39b91587f5a51479754ef6946206313
+    digest: sha256:33e311a483ae3e253b918abeb1aeedbe3101cf99ddcfc2bddf150780ae0baaf5
 patches:
   # Recursos reducidos: DEV y QA comparten un nodo con la observabilidad.
   - target: {kind: Deployment, name: erp-api}
