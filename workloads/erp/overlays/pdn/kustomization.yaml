@@ -88,7 +88,7 @@ configMapGenerator:
 # en Argo CD, y el digest en el commit es lo que se aprueba.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:76533e2938acb4f186b898a314c840c3179b98684129f138474f0d9b7135255d
+    digest: sha256:8a930170e97d2b6d856df6cb14014b506786166cfd1320f130d77a2a30dedccb
   - name: ghcr.io/jormancopete/ingenia365erp/web
     digest: sha256:6d119dabdab441876f96ca043835ad3c7a800925cbb44868929063ddcd625956
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
