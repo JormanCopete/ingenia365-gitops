@@ -69,7 +69,7 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: kube-state-metrics }
       annotations:
-        configuracion/version: "2"
+        configuracion/version: "3"
     spec:
       serviceAccountName: kube-state-metrics
       securityContext: { runAsNonRoot: true, runAsUser: 65534, seccompProfile: { type: RuntimeDefault } }
@@ -90,8 +90,11 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 20
             timeoutSeconds: 5
+          # Y la vida va al reves: desde la v2.17 /healthz y /livez responden en
+          # el 8080 y en el 8081 dan 404. Con la sonda en el 8081 el pod se
+          # reinicio 32.240 veces en 90 dias (corregido el 2026-11-11).
           livenessProbe:
-            httpGet: { path: /healthz, port: telemetria }
+            httpGet: { path: /livez, port: http }
             initialDelaySeconds: 15
             periodSeconds: 30
             timeoutSeconds: 5
