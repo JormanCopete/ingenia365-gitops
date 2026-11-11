@@ -51,6 +51,14 @@ spec:
               value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
             - name: Database__AdminConnectionStrings__PostgreSQL
               value: "Host=erp-db-rw;Port=5432;Database=ingenia365erp_admin;Username=$(DB_USER);Password=$(DB_PASSWORD);SSL Mode=Require;Trust Server Certificate=true"
+            # --- Precalentamiento al arrancar ---
+            # La API compila modelos y planes de consulta y abre conexiones ANTES de pasar a
+            # ready (check "precalentamiento" de /health/ready, en segundo plano, sin escribir).
+            # Tope duro: pasado, el pod queda listo igual. Debe caber en el margen de la
+            # startupProbe (300 s) menos migraciones; con maxUnavailable 0 el pod viejo sigue
+            # sirviendo mientras el nuevo se calienta.
+            - name: Precalentamiento__TopeSegundos
+              value: "90"
             # --- Dependencias ---
             - name: ConnectionStrings__Redis
               value: "erp-redis:6379,abortConnect=false"
@@ -106,7 +114,7 @@ spec:
             periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 3
-          # /health/ready: BD migrada y sembrada + Mongo + Redis OK. Si falla,
+          # /health/ready: BD migrada y sembrada + Mongo + Redis OK + precalentamiento de la API terminado. Si falla,
           # deja de recibir trafico pero NO se reinicia (evita ciclos durante migraciones).
           # timeoutSeconds explicito: el default de 1 s no alcanza. /health/ready
           # consulta PostgreSQL, MongoDB y Redis en serie; medido en DEV tarda
