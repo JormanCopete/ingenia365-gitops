@@ -51,7 +51,9 @@ spec:
     # los limites son un tope, no una reserva.
     # 12Gi desde el 2026-11-06: con la API a 2 GiB los limites suman 9728Mi y el
     # excedente de la API pide 2112Mi mas (API + sidecar) durante el relevo.
-    limits.memory: 12Gi
+    # 12800Mi desde el 2026-11-12: RabbitMQ (feature 023) suma 512Mi de limite y
+    # 256Mi de request; se conserva el margen del relevo de la API.
+    limits.memory: 12800Mi
     persistentvolumeclaims: "10"
 ---
 # Todo contenedor que no declare un recurso recibe el valor de aqui: un pod mal

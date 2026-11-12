@@ -15,6 +15,10 @@ components:
   # T986 (feature 012 del ERP): Mongo con autenticacion y claves propias de firma
   # de auditoria. Requiere los Secrets del componente (ver su cabecera).
   - ../../components/auditoria-protegida
+  # Feature 023 del ERP: RabbitMQ despierta y reparte la emision electronica y la
+  # bandeja de integracion. Requiere el Secret erp-rabbitmq en erp-pdn (instalado el
+  # 2026-11-12 con crear-secreto-rabbitmq.ps1; ver la cabecera del componente).
+  - ../../components/mensajeria
 # PRODUCCION: no se auto-migra (fail-fast si hay pendientes) y no lleva datos
 # demo. El esquema lo aplica el Job PreSync antes de rotar los pods.
 configMapGenerator:
