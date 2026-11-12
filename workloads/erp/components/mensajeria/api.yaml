@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          ports:
+            # Metricas de los trabajos de fondo (feature 023). No esta en el Service
+            # del Ingress: la lee el agente de Prometheus por el pod.
+            - { name: metrics, containerPort: 9464 }
+          env:
+            - name: Mensajeria__Proveedor
+              value: RabbitMq
+            - name: Mensajeria__Host
+              value: erp-rabbitmq
+            - name: Mensajeria__VirtualHost
+              value: /erp
+            - name: Mensajeria__Usuario
+              valueFrom: { secretKeyRef: { name: erp-rabbitmq, key: usuario } }
+            - name: Mensajeria__Clave
+              valueFrom: { secretKeyRef: { name: erp-rabbitmq, key: clave } }

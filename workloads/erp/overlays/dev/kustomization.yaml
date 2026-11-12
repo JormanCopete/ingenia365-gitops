@@ -12,6 +12,10 @@ components:
   # T986 (feature 012 del ERP): Mongo con autenticacion y claves propias de firma
   # de auditoria. Requiere los Secrets del componente (ver su cabecera).
   - ../../components/auditoria-protegida
+  # Feature 023 del ERP: RabbitMQ despierta y reparte la emision electronica y la
+  # bandeja de integracion. Requiere el Secret erp-rabbitmq en erp-dev (ver la
+  # cabecera del componente).
+  - ../../components/mensajeria
 # DEV: se auto-migra y se siembra con datos demo. Es el ambiente donde el
 # esquema puede romperse sin consecuencias.
 configMapGenerator:

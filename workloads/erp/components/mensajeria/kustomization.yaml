@@ -1,0 +1,36 @@
+# Mensajeria (feature 023 del ERP: emision electronica asincrona).
+#
+# RabbitMQ SOLO despierta y reparte el trabajo de fondo de la API: la emision de
+# documentos electronicos ante la DIAN, su seguimiento (representacion, correo al
+# comprador) y la bandeja de integracion. La verdad sigue en la base de cada
+# cooperativa: si el broker se cae o pierde algo, la API sigue vendiendo y el
+# barrido de cada replica emite (salud "Degraded", nunca "Unhealthy"). Los avisos
+# no llevan datos de negocio, solo PublicIds.
+#
+# QUE TRAE: un StatefulSet de una replica (colas quorum, que la API declara al
+# arrancar), su Service, su configuracion y el parche de la API (Mensajeria__* y el
+# puerto de metricas 9464, que el Ingress no publica).
+#
+# COMO SE ACTIVA EN UN OVERLAY (y solo cuando exista el Secret):
+#   components:
+#     - ../../components/mensajeria
+#
+# REQUISITO, desde el repositorio del ERP:
+#   tools/scripts/crear-secreto-rabbitmq.ps1 -Ambiente <amb>
+#     -> Secret erp-rabbitmq (claves usuario y clave), nunca en este repositorio.
+# Sin el Secret ni RabbitMQ ni la API arrancan: a proposito, un ambiente a medias
+# no recibe trafico. Quitar el componente devuelve la API al modo sin broker
+# (Mensajeria__Proveedor=EnProceso por defecto) sin perder nada.
+#
+# PDN: antes de activarlo, sumar 256Mi a requests.memory y 512Mi a limits.memory
+# del ResourceQuota de overlays/pdn/disponibilidad.yaml (hoy 5Gi / 12Gi, con 12Gi
+# apenas para el relevo de la API) y una PVC mas.
+#
+# Runbook: docs/operaciones/mensajeria-rabbitmq.md del ERP.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - rabbitmq.yaml
+patches:
+  - path: api.yaml
+    target: { kind: Deployment, name: erp-api }

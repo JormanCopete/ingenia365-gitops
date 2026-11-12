@@ -1,0 +1,45 @@
+# Alertas de la mensajeria del ERP (feature 023: emision electronica asincrona).
+#
+# Se evaluan en el Prometheus de nonprod. Las series salen de dos lugares:
+#   - la API (puerto 9464 del pod, /metrics): erp_trabajos_pendientes,
+#     erp_trabajos_edad_mas_viejo_segundos y erp_trabajos_muertos por cola y
+#     cooperativa, calculadas por el barrido desde la base (la verdad);
+#   - RabbitMQ (puerto 15692, plugin rabbitmq_prometheus): la profundidad del
+#     broker, que no es la verdad pero muestra si el consumo se detuvo.
+#
+# PENDIENTE para que lleguen las de PDN: sumar dos scrape_configs al agente de
+# infrastructure/pdn/monitoreo.yaml (pods de erp-pdn en el puerto "metrics" de la
+# API y el servicio erp-rabbitmq:15692). Es configuracion de produccion: se hace
+# con la activacion del componente en PDN y autorizacion del duenio.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: erp-mensajeria
+  namespace: monitoring
+  labels:
+    release: monitoring        # debe coincidir con el ruleSelector de Prometheus
+spec:
+  groups:
+    - name: erp-mensajeria
+      rules:
+        - alert: ErpTrabajosMuertos
+          expr: max by (ambiente, cola, cooperativa) (erp_trabajos_muertos) > 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Hay trabajos muertos en {{ $labels.cola }} ({{ $labels.cooperativa }})"
+            description: "Agotaron su tope de intentos. Reprocesar en Administracion > Mensajes muertos cuando la causa este resuelta."
+        - alert: ErpEmisionAtrasada
+          expr: max by (ambiente, cola, cooperativa) (erp_trabajos_edad_mas_viejo_segundos) > 600
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Documentos electronicos sin enviar hace mas de 10 minutos ({{ $labels.cooperativa }})"
+            description: "Mirar el canal, el broker y los logs [FE.*] y [Mensajeria.*] con el PublicId del documento."
+        - alert: ErpRabbitMqCaido
+          expr: up{job=~".*rabbitmq.*"} == 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "RabbitMQ no responde en {{ $labels.ambiente }}"
+            description: "La API sigue vendiendo y el barrido emite cada 15 s; la latencia de la emision sube. Ver el runbook mensajeria-rabbitmq.md."

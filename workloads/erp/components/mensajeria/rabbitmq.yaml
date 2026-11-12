@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: erp-rabbitmq-config
+  labels: { app.kubernetes.io/name: erp-rabbitmq, app.kubernetes.io/part-of: ingenia365erp }
+data:
+  # Una sola instancia por ambiente: el VPS es uno. Las colas son quorum igual
+  # (las declara la API), asi se puede crecer a tres nodos sin tocar el codigo.
+  rabbitmq.conf: |
+    default_vhost = /erp
+    loopback_users.guest = false
+    vm_memory_high_watermark.absolute = 320MiB
+    disk_free_limit.absolute = 256MiB
+    log.console.level = warning
+  # El plugin de Prometheus expone la profundidad de las colas en :15692/metrics.
+  enabled_plugins: |
+    [rabbitmq_management,rabbitmq_prometheus].
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: erp-rabbitmq
+  labels: { app.kubernetes.io/name: erp-rabbitmq, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  serviceName: erp-rabbitmq-headless
+  replicas: 1
+  selector: { matchLabels: { app.kubernetes.io/name: erp-rabbitmq } }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: erp-rabbitmq, app.kubernetes.io/part-of: ingenia365erp }
+    spec:
+      # El usuario rabbitmq de la imagen alpine es uid 100, gid 101.
+      securityContext: { runAsNonRoot: true, runAsUser: 100, runAsGroup: 101, fsGroup: 101 }
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4.1-management-alpine
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              valueFrom: { secretKeyRef: { name: erp-rabbitmq, key: usuario } }
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom: { secretKeyRef: { name: erp-rabbitmq, key: clave } }
+            - name: RABBITMQ_DEFAULT_VHOST
+              value: /erp
+            # Nombre de nodo estable: el volumen guarda las colas bajo este nombre.
+            - name: RABBITMQ_NODENAME
+              value: rabbit@localhost
+          ports:
+            - { name: amqp, containerPort: 5672 }
+            - { name: management, containerPort: 15672 }
+            - { name: prometheus, containerPort: 15692 }
+          # timeoutSeconds explicito: rabbitmq-diagnostics arranca una VM de Erlang
+          # y con el default de 1 s una pausa de CPU reiniciaria un broker sano.
+          startupProbe:
+            exec: { command: ["rabbitmq-diagnostics", "-q", "ping"] }
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            exec: { command: ["rabbitmq-diagnostics", "-q", "ping"] }
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            exec: { command: ["rabbitmq-diagnostics", "-q", "check_port_connectivity"] }
+            periodSeconds: 15
+            timeoutSeconds: 15
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: "1", memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/rabbitmq }
+            - { name: config, mountPath: /etc/rabbitmq/rabbitmq.conf, subPath: rabbitmq.conf }
+            - { name: config, mountPath: /etc/rabbitmq/enabled_plugins, subPath: enabled_plugins }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      volumes:
+        - name: config
+          configMap: { name: erp-rabbitmq-config }
+  # Las plantillas son inmutables: volumeMode explicito evita la deriva de Argo
+  # (el servidor lo completa y la comparacion lo veria distinto).
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        volumeMode: Filesystem
+        resources: { requests: { storage: 2Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erp-rabbitmq
+  labels: { app.kubernetes.io/name: erp-rabbitmq, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  selector: { app.kubernetes.io/name: erp-rabbitmq }
+  ports:
+    - { name: amqp, port: 5672, targetPort: amqp }
+    - { name: prometheus, port: 15692, targetPort: prometheus }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: erp-rabbitmq-headless
+  labels: { app.kubernetes.io/name: erp-rabbitmq, app.kubernetes.io/part-of: ingenia365erp }
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: { app.kubernetes.io/name: erp-rabbitmq }
+  ports:
+    - { name: amqp, port: 5672, targetPort: amqp }
