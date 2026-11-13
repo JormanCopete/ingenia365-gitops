@@ -73,6 +73,14 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: {name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS, value: "+S 1:1"}
+      - op: add
+        path: /spec/template/spec/initContainers
+        value:
+          - name: cookie-privada
+            image: rabbitmq:4.1-management-alpine
+            command: ["sh", "-c", "f=/var/lib/rabbitmq/.erlang.cookie; if [ -f $f ]; then chmod 400 $f; fi"]
+            volumeMounts: [{name: data, mountPath: /var/lib/rabbitmq}]
+            securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
   # Recursos reducidos: DEV y QA comparten un nodo con la observabilidad.
   - target: {kind: Deployment, name: erp-api}
     patch: |-

@@ -93,11 +93,22 @@ patches:
   # 1 CPU del contenedor: con eso Kubernetes frenaba a RabbitMQ ~25 % del tiempo y
   # CPUThrottlingHigh se encendia y apagaba cada pocos minutos (2026-11-13). Un
   # planificador para un CPU.
+  # Y un contenedor de arranque que deja privada la cookie de Erlang: el fsGroup
+  # del volumen le abre permisos de grupo en cada montaje y Erlang no arranca
+  # («must be accessible by owner only»). Paso al primer reinicio (2026-11-13).
   - target: {kind: StatefulSet, name: erp-rabbitmq}
     patch: |-
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: {name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS, value: "+S 1:1"}
+      - op: add
+        path: /spec/template/spec/initContainers
+        value:
+          - name: cookie-privada
+            image: rabbitmq:4.1-management-alpine
+            command: ["sh", "-c", "f=/var/lib/rabbitmq/.erlang.cookie; if [ -f $f ]; then chmod 400 $f; fi"]
+            volumeMounts: [{name: data, mountPath: /var/lib/rabbitmq}]
+            securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
   - target: {kind: StatefulSet, name: erp-mongo}
     patch: |-
       - op: replace
