@@ -31,6 +31,16 @@ spec:
     spec:
       # El usuario rabbitmq de la imagen alpine es uid 100, gid 101.
       securityContext: { runAsNonRoot: true, runAsUser: 100, runAsGroup: 101, fsGroup: 101 }
+      # El fsGroup le abre permisos de grupo a la cookie de Erlang en cada montaje y
+      # Erlang se niega a arrancar («must be accessible by owner only»): el primer
+      # arranque funciona y cualquier reinicio despues no. Se vio en DEV y QA el
+      # 2026-11-13 al primer reinicio; este contenedor la deja privada antes.
+      initContainers:
+        - name: cookie-privada
+          image: rabbitmq:4.1-management-alpine
+          command: ["sh", "-c", "f=/var/lib/rabbitmq/.erlang.cookie; if [ -f $f ]; then chmod 400 $f; fi"]
+          volumeMounts: [{ name: data, mountPath: /var/lib/rabbitmq }]
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } }
       containers:
         - name: rabbitmq
           image: rabbitmq:4.1-management-alpine
@@ -44,6 +54,10 @@ spec:
             # Nombre de nodo estable: el volumen guarda las colas bajo este nombre.
             - name: RABBITMQ_NODENAME
               value: rabbit@localhost
+            # Erlang arranca un planificador por cada nucleo del NODO, no por el
+            # limite de 1 CPU: Kubernetes lo frenaba ~25 % del tiempo (2026-11-13).
+            - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+              value: "+S 1:1"
           ports:
             - { name: amqp, containerPort: 5672 }
             - { name: management, containerPort: 15672 }

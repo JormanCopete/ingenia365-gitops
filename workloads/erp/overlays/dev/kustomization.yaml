@@ -67,20 +67,6 @@ images:
   - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
     digest: sha256:fc98c6b8e17783750b6156e91e6816a3cd07ad08969ad1bb1435e78e7fd7b7da
 patches:
-  # Un planificador de Erlang para el CPU de RabbitMQ: ver la nota del overlay de QA.
-  - target: {kind: StatefulSet, name: erp-rabbitmq}
-    patch: |-
-      - op: add
-        path: /spec/template/spec/containers/0/env/-
-        value: {name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS, value: "+S 1:1"}
-      - op: add
-        path: /spec/template/spec/initContainers
-        value:
-          - name: cookie-privada
-            image: rabbitmq:4.1-management-alpine
-            command: ["sh", "-c", "f=/var/lib/rabbitmq/.erlang.cookie; if [ -f $f ]; then chmod 400 $f; fi"]
-            volumeMounts: [{name: data, mountPath: /var/lib/rabbitmq}]
-            securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
   # Recursos reducidos: DEV y QA comparten un nodo con la observabilidad.
   - target: {kind: Deployment, name: erp-api}
     patch: |-
