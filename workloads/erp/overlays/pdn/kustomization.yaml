@@ -92,11 +92,11 @@ configMapGenerator:
 # en Argo CD, y el digest en el commit es lo que se aprueba.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:3198510c68d35320bdb668821139b7060c384709fd31a00b35fcdb2e8399b486
+    digest: sha256:a793dfc43611a0981dd729249417755839fc6f6d905eeeb99f58aaf11fcef7e4
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:d93f36930dcc92e9077ab650d894de634202ec4baeaf97b4b00e35519a3330d9
+    digest: sha256:79b76cace5cae8ad992b10f286a0abac41109006f14a830bb477d4a99f24cb82
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
-    digest: sha256:6b0ff02bd85bc17733e8d5f5c4d58826a5f92acd30a1af6415a77a3fe3e55d3f
+    digest: sha256:4d291e76dad2437b2f7afa5c50b71540cd287a20d132a6d53e808f50cab8bb41
   # Sidecar de credenciales (feature 011). Digest de partida el de develop; el CI
   # de release lo reemplaza como a los demas.
   - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
