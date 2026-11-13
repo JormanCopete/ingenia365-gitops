@@ -36,8 +36,11 @@ spec:
               barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{ambiente="pdn"}
             ) > 26 * 3600
           for: 15m
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "La copia de seguridad de la base de datos está vieja"
+            que_pasa: "La base de datos del ERP (contabilidad, cartera, nómina…) lleva más de un día sin copia de seguridad. El sistema funciona, pero ante un daño se perdería información."
+            que_hacer: "Revisarlo hoy."
             summary: "Sin respaldo completo de PostgreSQL en {{ $labels.namespace }} hace mas de 26 h"
             description: "El respaldo diario corre a las 06:30 UTC. 26 h da margen para un retraso, no para dos dias sin copia."
 
@@ -47,8 +50,11 @@ spec:
               barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{ambiente="pdn"}
             ) == 0
           for: 1h
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "La base de datos nunca ha tenido copia de seguridad"
+            que_pasa: "La base de datos del ERP no tiene ni una sola copia de seguridad completa."
+            que_hacer: "Revisarlo ya."
             summary: "PostgreSQL de {{ $labels.namespace }} nunca completo un respaldo"
             description: "Revisar el ObjectStore, el Secret s3-backup-creds y la politica IAM del bucket."
 
@@ -57,8 +63,11 @@ spec:
             max by (ambiente, namespace) (barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{ambiente="pdn"})
             > max by (ambiente, namespace) (barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{ambiente="pdn"})
           for: 10m
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "Falló la copia de seguridad de la base de datos"
+            que_pasa: "El último intento de copia de seguridad de la base de datos del ERP falló."
+            que_hacer: "Revisarlo hoy."
             summary: "El ultimo intento de respaldo de {{ $labels.namespace }} fallo"
             description: "Revisar los logs del contenedor plugin-barman-cloud del pod de PostgreSQL."
 
@@ -77,8 +86,11 @@ spec:
             cnpg_pg_stat_archiver_last_failed_time{ambiente="pdn"}
             > cnpg_pg_stat_archiver_last_archived_time{ambiente="pdn"}
           for: 10m
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "La copia continua de la base de datos no se está guardando"
+            que_pasa: "La base de datos guarda minuto a minuto una copia de cada cambio, y eso se detuvo. Si hubiera que restaurar, se perdería lo hecho desde que empezó la falla; y si sigue, el disco se llena."
+            que_hacer: "Revisarlo ya."
             summary: "El archivado de WAL esta fallando en {{ $labels.namespace }}"
             description: "Sin archivado no hay PITR. Causa frecuente: permisos del bucket (falto s3:PutObjectTagging el 2026-08-12)."
 
@@ -89,8 +101,11 @@ spec:
         - alert: WalPendienteDeArchivar
           expr: cnpg_collector_pg_wal_archive_status{ambiente="pdn", value="ready"} > 0
           for: 15m
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "La copia continua de la base de datos va atrasada"
+            que_pasa: "Hay cambios de la base de datos esperando a copiarse. Si no se drenan, el disco se llena y la base deja de guardar."
+            que_hacer: "Revisarlo ya."
             summary: "{{ $value }} segmentos de WAL sin archivar en {{ $labels.namespace }}"
             description: "Se estan acumulando en pg_wal. Si no se drena, el disco se llena y PostgreSQL deja de aceptar escrituras."
 
@@ -99,8 +114,11 @@ spec:
         - alert: RespaldoMongoFallido
           expr: kube_job_status_failed{ambiente="pdn", job_name=~"mongo-respaldo.*"} > 0
           for: 5m
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "Falló la copia de seguridad de la auditoría"
+            que_pasa: "La copia diaria de la auditoría (quién hizo qué, que se guarda por ley 5 años) no quedó guardada. Los datos siguen intactos, pero sin copia reciente."
+            que_hacer: "Revisarlo hoy; si las copias siguientes salieron bien, basta con borrar la tarea fallida."
             summary: "Fallo el respaldo de MongoDB en {{ $labels.namespace }}"
             description: "Aqui vive la auditoria SARLAFT con retencion obligatoria de 5 anos. Revisar los logs del Job."
 
@@ -108,8 +126,11 @@ spec:
           expr: |
             time() - max(kube_job_status_completion_time{ambiente="pdn", job_name=~"mongo-respaldo.*"}) > 26 * 3600
           for: 30m
-          labels: { severity: critical, componente: respaldo }
+          labels: { severity: critical, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "La copia de seguridad de la auditoría no se hizo"
+            que_pasa: "Hace más de un día que no se copia la auditoría (quién hizo qué)."
+            que_hacer: "Revisarlo hoy."
             summary: "Sin respaldo de MongoDB en mas de 26 h"
             description: "El CronJob corre a las 07:15 UTC. Verificar que no este suspendido."
 
@@ -118,8 +139,11 @@ spec:
         - alert: RespaldoSuspendidoDemasiadoTiempo
           expr: kube_cronjob_spec_suspend{ambiente="pdn", cronjob=~"mongo-respaldo.*"} == 1
           for: 3d
-          labels: { severity: warning, componente: respaldo }
+          labels: { severity: warning, componente: respaldo, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "Las copias de seguridad están pausadas"
+            que_pasa: "La copia automática de la auditoría lleva días pausada. Si el ambiente ya tiene datos, hay que reactivarla."
+            que_hacer: "Revisarlo cuando se pueda."
             summary: "El respaldo {{ $labels.cronjob }} lleva 3 dias suspendido"
             description: "Se suspende a proposito mientras el ambiente no tiene datos. Si ya los tiene, hay que reactivarlo."
 
@@ -132,7 +156,10 @@ spec:
         - alert: ProduccionDejoDeReportar
           expr: absent(up{ambiente="pdn"} == 1)
           for: 10m
-          labels: { severity: critical, componente: observabilidad }
+          labels: { severity: critical, componente: observabilidad, origen: ingenia365, ambiente_texto: pdn }
           annotations:
+            titulo: "Producción dejó de reportar al monitoreo"
+            que_pasa: "No llegan datos de producción. El ERP puede estar funcionando, pero mientras dure NINGUNA alerta de producción puede avisar."
+            que_hacer: "Revisarlo ya."
             summary: "No llegan metricas de PRODUCCION"
             description: "El agente de PDN o el enlace por la malla estan caidos. Mientras dure, NINGUNA alerta de produccion puede dispararse."

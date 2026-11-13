@@ -2,26 +2,28 @@
 #
 # Hay UN solo Alertmanager para los tres ambientes: vive en nonprod, y produccion
 # le manda sus metricas por el agente de infrastructure/pdn/monitoreo.yaml. Este
-# archivo decide que llega al chat y con que texto, para DEV, QA y PDN a la vez.
+# archivo decide que llega al chat y con que forma, para DEV, QA y PDN a la vez.
 #
-# NO lo sincroniza Argo (infrastructure/ se aplica a mano). Hasta el 2026-11-13
-# existia solo en el cluster; se versiona aqui para que no se pierda. El repo es
-# PUBLICO: el chat y el token no van aqui. El token esta en el Secret
-# telegram-alertas; el chat se toma del objeto vivo al aplicar:
+# LOS TEXTOS NO ESTAN AQUI: cada regla trae los suyos en sus anotaciones
+# (titulo, que_pasa, que_hacer) en alertas-explicadas.yaml y alertas-backup.yaml,
+# que son lo mismo que muestra Grafana. Aqui solo esta la forma del mensaje.
+#
+# Llega a Telegram SOLO lo que lleva la etiqueta origen=ingenia365 (las reglas de
+# esos dos archivos); las reglas de fabrica de kube-prometheus-stack se evaluan y se
+# ven en Grafana, pero no avisan. Para que una avise, se copia al catalogo con sus
+# textos.
+#
+# NO lo sincroniza Argo: el chat no puede ir en el repo (es PUBLICO) y este objeto
+# no admite leerlo de un Secret. El token esta en el Secret telegram-alertas; el
+# chat se toma del objeto vivo al aplicar:
 #
 #   chat=$(kubectl -n monitoring get alertmanagerconfig alertas-ingenia365 \
 #            -o jsonpath='{.spec.receivers[?(@.name=="telegram")].telegramConfigs[0].chatID}')
-#   sed "s/chatID: 0 /chatID: $chat /" alertas-telegram.yaml | kubectl apply -f -
+#   sed "s/chatID: 0 #/chatID: $chat #/" alertas-telegram.yaml | kubectl apply -f -
 #
-# Ruido descartado (2026-11-13): InfoInhibitor no es una alerta, es un marcador
-# que kube-prometheus-stack usa para silenciar las «info» y su propia descripcion
-# pide mandarlo a un receptor nulo; las de severidad info (CPUThrottlingHigh y
-# compania) son ruido por diseno. Desde que entro RabbitMQ (2026-11-12) las dos se
-# encendian y apagaban cada pocos minutos en erp-dev y erp-qa.
-#
-# El mensaje lleva primero una explicacion en lenguaje llano (que pasa, que tan
-# grave, que hacer) y abajo el detalle tecnico. Una alerta nueva sin explicacion
-# cae en el texto generico: agregar su caso en el bloque de abajo.
+# Historia: hasta el 2026-11-13 existia solo en el cluster, mandaba todo a
+# Telegram (InfoInhibitor y las «info» incluidas: ruido que se encendia y apagaba
+# cada pocos minutos desde que entro RabbitMQ) y con el texto tecnico en ingles.
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
@@ -41,83 +43,26 @@ spec:
           parseMode: HTML
           sendResolved: true
           message: |
-            {{- $a := .CommonLabels.alertname -}}
-            {{- $amb := or .CommonLabels.namespace .CommonLabels.ambiente -}}
-            {{- if eq .Status "resolved" -}}✅ <b>RESUELTO</b>{{- else if eq .CommonLabels.severity "critical" -}}🔴 <b>PROBLEMA GRAVE</b>{{- else -}}🟠 <b>AVISO</b>{{- end }}
-            {{- if eq $a "RespaldoMongoFallido" }} — falló la copia de seguridad de la auditoría
-            {{- else if eq $a "RespaldoMongoNoCorrio" }} — la copia de seguridad de la auditoría no se hizo
-            {{- else if eq $a "RespaldoPostgresNuncaEjecutado" }} — la base de datos nunca ha tenido copia de seguridad
-            {{- else if eq $a "RespaldoPostgresViejo" }} — la copia de seguridad de la base de datos está vieja
-            {{- else if eq $a "UltimoRespaldoPostgresFallido" }} — falló la copia de seguridad de la base de datos
-            {{- else if eq $a "RespaldoSuspendidoDemasiadoTiempo" }} — las copias de seguridad están pausadas
-            {{- else if or (eq $a "ArchivadoWalFallando") (eq $a "WalPendienteDeArchivar") }} — la copia continua de la base de datos no se está guardando
-            {{- else if or (eq $a "PrometheusRemoteStorageFailures") (eq $a "PrometheusRemoteWriteBehind") (eq $a "PrometheusRemoteWriteDesiredShards") }} — el monitoreo de producción no está llegando
-            {{- else if eq $a "KubeJobFailed" }} — una tarea programada terminó con error
-            {{- else if eq $a "KubePodCrashLooping" }} — un componente se reinicia una y otra vez
-            {{- else if or (eq $a "KubePodNotReady") (eq $a "KubeDeploymentReplicasMismatch") (eq $a "KubeStatefulSetReplicasMismatch") (eq $a "KubeDeploymentRolloutStuck") (eq $a "KubeContainerWaiting") }} — un componente no está funcionando
-            {{- else if or (eq $a "KubeMemoryOvercommit") (eq $a "KubeCPUOvercommit") }} — el servidor tiene más carga reservada de la que aguanta
-            {{- else if or (eq $a "KubePersistentVolumeFillingUp") (eq $a "NodeFilesystemSpaceFillingUp") (eq $a "NodeFilesystemAlmostOutOfSpace") }} — se está llenando un disco
-            {{- else if or (eq $a "KubeNodeNotReady") (eq $a "NodeMemoryHighUtilization") (eq $a "KubeNodeUnreachable") }} — el servidor tiene problemas
-            {{- else if eq $a "TargetDown" }} — el monitoreo no logra leer un componente
-            {{- else if eq $a "ErpTrabajosMuertos" }} — hay tareas de fondo del ERP que no se pudieron hacer
-            {{- else if eq $a "ErpEmisionAtrasada" }} — hay facturas electrónicas sin enviar a la DIAN
-            {{- else if eq $a "ErpRabbitMqCaido" }} — el despertador de tareas de fondo no responde
-            {{- else if eq $a "CPUThrottlingHigh" }} — un componente va lento por falta de procesador
-            {{- else }} — alerta técnica{{ end }}
+            {{- $amb := or .CommonLabels.namespace .CommonLabels.ambiente .CommonLabels.ambiente_texto -}}
+            {{- if eq .Status "resolved" -}}✅ <b>RESUELTO</b>{{- else if eq .CommonLabels.severity "critical" -}}🔴 <b>PROBLEMA GRAVE</b>{{- else -}}🟠 <b>AVISO</b>{{- end }} — {{ or .CommonAnnotations.titulo .CommonLabels.alertname | html }}
 
-            <b>Ambiente:</b> {{ if eq $amb "erp-pdn" }}PRODUCCIÓN{{ else if eq $amb "erp-qa" }}QA (pruebas con usuarios){{ else if eq $amb "erp-dev" }}DEV (pruebas internas){{ else if $amb }}{{ $amb }}{{ else }}servidor de monitoreo{{ end }}
+            <b>Ambiente:</b> {{ if or (eq $amb "erp-pdn") (eq $amb "pdn") }}PRODUCCIÓN{{ else if eq $amb "erp-qa" }}QA (pruebas con usuarios){{ else if eq $amb "erp-dev" }}DEV (pruebas internas){{ else if $amb }}{{ $amb }}{{ else }}servidor de monitoreo{{ end }}
             {{- if ne .Status "resolved" }}
-            <b>Qué pasa:</b> {{ if or (eq $a "RespaldoMongoFallido") (eq $a "RespaldoMongoNoCorrio") -}}
-            La copia diaria de la auditoría (quién hizo qué) no quedó guardada. Los datos siguen intactos, pero si hoy se perdieran no habría copia reciente.
-            {{- else if or (eq $a "RespaldoPostgresNuncaEjecutado") (eq $a "RespaldoPostgresViejo") (eq $a "UltimoRespaldoPostgresFallido") (eq $a "RespaldoSuspendidoDemasiadoTiempo") -}}
-            La base de datos del ERP (contabilidad, cartera, nómina…) no tiene una copia de seguridad reciente. El sistema funciona, pero ante un daño se perdería información.
-            {{- else if or (eq $a "ArchivadoWalFallando") (eq $a "WalPendienteDeArchivar") -}}
-            La base de datos guarda minuto a minuto una copia de cada cambio, y eso se detuvo. Si hubiera que restaurar, se perdería lo hecho desde que empezó la falla.
-            {{- else if or (eq $a "PrometheusRemoteStorageFailures") (eq $a "PrometheusRemoteWriteBehind") (eq $a "PrometheusRemoteWriteDesiredShards") -}}
-            Producción no le está mandando sus datos al monitoreo. El ERP puede estar bien, pero mientras dure esto no llegarían avisos de producción.
-            {{- else if eq $a "KubeJobFailed" -}}
-            Una tarea que corre sola (respaldo, proceso nocturno, migración) terminó con error. El aviso sigue mientras la tarea fallida no se limpie, aunque las siguientes hayan salido bien.
-            {{- else if eq $a "KubePodCrashLooping" -}}
-            Una parte del sistema arranca, falla y vuelve a arrancar. Si es la aplicación, los usuarios pueden ver errores o no poder entrar.
-            {{- else if or (eq $a "KubePodNotReady") (eq $a "KubeDeploymentReplicasMismatch") (eq $a "KubeStatefulSetReplicasMismatch") (eq $a "KubeDeploymentRolloutStuck") (eq $a "KubeContainerWaiting") -}}
-            Una parte del sistema no quedó lista (por ejemplo después de un despliegue). Los usuarios pueden notar errores o lentitud.
-            {{- else if or (eq $a "KubeMemoryOvercommit") (eq $a "KubeCPUOvercommit") -}}
-            Los programas del servidor tienen reservada más memoria o procesador de la que el servidor tiene. Hoy funciona, pero si todos la usan a la vez algo se cae.
-            {{- else if or (eq $a "KubePersistentVolumeFillingUp") (eq $a "NodeFilesystemSpaceFillingUp") (eq $a "NodeFilesystemAlmostOutOfSpace") -}}
-            Un disco se está quedando sin espacio. Cuando se llene, la base de datos o la aplicación dejan de guardar.
-            {{- else if or (eq $a "KubeNodeNotReady") (eq $a "NodeMemoryHighUtilization") (eq $a "KubeNodeUnreachable") -}}
-            El servidor mismo está fallando o sin memoria; todo lo que corre en él puede verse afectado.
-            {{- else if eq $a "TargetDown" -}}
-            El monitoreo no logra leer los datos de un componente. Puede ser que el componente esté caído o sólo que no se deja medir.
-            {{- else if eq $a "ErpTrabajosMuertos" -}}
-            Tareas de fondo del ERP (por ejemplo enviar una factura a la DIAN) fallaron todos sus reintentos y quedaron detenidas.
-            {{- else if eq $a "ErpEmisionAtrasada" -}}
-            Hay facturas o documentos electrónicos esperando hace más de 10 minutos para salir a la DIAN. Las ventas siguen, pero los documentos se están atrasando.
-            {{- else if eq $a "ErpRabbitMqCaido" -}}
-            RabbitMQ, que avisa al ERP cuando hay trabajo de fondo, no responde. El ERP sigue funcionando pero las facturas electrónicas salen más lento.
-            {{- else if eq $a "CPUThrottlingHigh" -}}
-            Un componente quiere más procesador del que tiene asignado y se le frena. Suele ser sólo lentitud.
-            {{- else -}}
-            Todavía no hay explicación sencilla para esta alerta; abajo va el detalle técnico.
-            {{- end }}
-            <b>Qué hacer:</b> {{ if eq $amb "erp-pdn" }}revisarlo hoy: es producción.{{ else if eq .CommonLabels.severity "critical" }}revisarlo pronto.{{ else }}nada urgente; si se repite seguido, pedir que se revise.{{ end }}
+            <b>Qué pasa:</b> {{ or .CommonAnnotations.que_pasa "Todavía no hay explicación sencilla para esta alerta; abajo va el detalle técnico." | html }}
+            <b>Qué hacer:</b> {{ if .CommonAnnotations.que_hacer }}{{ .CommonAnnotations.que_hacer | html }}{{ else if eq .CommonLabels.severity "critical" }}Revisarlo pronto.{{ else }}Nada urgente; si se repite seguido, pedir que se revise.{{ end }}
             {{- end }}
 
             <i>Detalle técnico</i>
-            <code>{{ $a }}</code>{{ if .CommonLabels.severity }} · {{ .CommonLabels.severity }}{{ end }}{{ if $amb }} · {{ $amb }}{{ end }}
+            <code>{{ .CommonLabels.alertname }}</code>{{ if .CommonLabels.regla_original }} ({{ .CommonLabels.regla_original }}){{ end }}{{ if .CommonLabels.severity }} · {{ .CommonLabels.severity }}{{ end }}{{ if $amb }} · {{ $amb }}{{ end }}
             {{- range .Alerts }}{{ if .Annotations.summary }}
             {{ .Annotations.summary | html }}{{ end }}{{ if .Annotations.description }}
             {{ .Annotations.description | html }}{{ end }}{{ end }}
   route:
-    receiver: telegram
-    groupBy: [alertname, namespace]
+    receiver: descartar
+    groupBy: [alertname, namespace, severity]
     groupWait: 30s
     groupInterval: 5m
     repeatInterval: 4h
     routes:
-      - matchers: [{ name: alertname, value: Watchdog }]
-        receiver: descartar
-      - matchers: [{ name: alertname, value: InfoInhibitor }]
-        receiver: descartar
-      - matchers: [{ name: severity, value: info }]
-        receiver: descartar
+      - matchers: [{ name: origen, value: ingenia365 }]
+        receiver: telegram

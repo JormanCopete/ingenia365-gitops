@@ -1,0 +1,416 @@
+# Catálogo de alertas EXPLICADAS (2026-11-13).
+#
+# Es la única fuente de los textos que lee la persona: Telegram arma el mensaje
+# con titulo, que_pasa y que_hacer (infrastructure/nonprod/alertas-telegram.yaml)
+# y Grafana muestra estas mismas reglas, con estos textos, en Alerting > Alert
+# rules (filtrar por origen=ingenia365). Para cambiar un texto, un umbral o un
+# «for», se edita ESTE archivo (también desde la página de GitHub) y Argo lo
+# aplica solo (aplicación monitoreo-alertas, infrastructure/nonprod/argocd-alertas.yaml).
+#
+# Las fórmulas son copia de las de kube-prometheus-stack (chart de monitoring),
+# con nombre en español y la etiqueta origen=ingenia365, que es lo único que llega a
+# Telegram: las originales siguen evaluándose y se ven en Grafana, pero no avisan.
+# Una alerta de la plataforma que no esté aquí no avisa; para que avise, se copia
+# su regla aquí con sus textos. Al actualizar el chart conviene recopiar las fórmulas.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: erp-alertas-explicadas
+  namespace: monitoring
+  labels:
+    release: monitoring        # debe coincidir con el ruleSelector de Prometheus
+spec:
+  groups:
+    - name: erp.plataforma
+      rules:
+        # Origen: TargetDown (warning)
+        - alert: ComponenteSinMedir
+          expr: |
+            100 * (count(up == 0) BY (cluster, job, namespace, service) / count(up) BY (cluster, job, namespace, service)) > 10
+          for: 10m
+          labels: { severity: warning, origen: ingenia365, regla_original: TargetDown }
+          annotations:
+            titulo: "El monitoreo no logra leer un componente"
+            que_pasa: "El monitoreo no está recibiendo datos de una parte del sistema. Puede que esa parte esté caída o sólo que no se deja medir."
+            que_hacer: "Nada urgente si el ERP funciona; si se repite, pedir que se revise."
+            summary: "One or more targets are unreachable."
+            description: "{{ printf \"%.4g\" $value }}% of the {{ $labels.job }}/{{ $labels.service }} targets in {{ $labels.namespace }} namespace are down."
+        # Origen: KubePodCrashLooping (warning)
+        - alert: ComponenteReiniciandose
+          expr: |
+            max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff", job="kube-state-metrics", namespace=~".*"}[5m]) >= 1
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubePodCrashLooping }
+          annotations:
+            titulo: "Un componente se reinicia una y otra vez"
+            que_pasa: "Una parte del sistema arranca, falla y vuelve a arrancar. Si es la aplicación, los usuarios pueden ver errores o no poder entrar."
+            que_hacer: "Revisarlo pronto, sobre todo si es producción."
+            summary: "Pod is crash looping."
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is in waiting state (reason: \"CrashLoopBackOff\") on cluster {{ $labels.cluster }}."
+        # Origen: KubePodNotReady (warning)
+        - alert: ComponenteNoListo
+          expr: |
+            sum by (namespace, pod, job, cluster) (
+              max by (namespace, pod, job, cluster) (
+                kube_pod_status_phase{job="kube-state-metrics", namespace=~".*", phase=~"Pending|Unknown"}
+                or
+                (
+                  kube_pod_status_phase{job="kube-state-metrics", namespace=~".*", phase="Running"} == 1
+                  and on (namespace, pod, cluster)
+                  kube_pod_status_ready{job="kube-state-metrics", namespace=~".*", condition="true"} == 0
+                )
+              ) * on (namespace, pod, cluster) group_left() topk by (namespace, pod, cluster) (
+                1, max by (namespace, pod, owner_kind, cluster) (kube_pod_owner{owner_kind!="Job"})
+              )
+            ) > 0
+            unless on (namespace, pod, cluster)
+            kube_pod_status_reason{job="kube-state-metrics", namespace=~".*", reason="SchedulingGated"} == 1
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubePodNotReady }
+          annotations:
+            titulo: "Un componente no está listo"
+            que_pasa: "Una parte del sistema lleva más de 15 minutos sin quedar lista (por ejemplo después de un despliegue). Los usuarios pueden notar errores o lentitud."
+            que_hacer: "Revisarlo pronto, sobre todo si es producción."
+            summary: "Pod has been in a non-ready state for more than 15 minutes."
+            description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for longer than 15 minutes on cluster {{ $labels.cluster }}."
+        # Origen: KubeDeploymentReplicasMismatch (warning)
+        - alert: DespliegueIncompleto
+          expr: |
+            (
+              kube_deployment_spec_replicas{job="kube-state-metrics", namespace=~".*"}
+                >
+              kube_deployment_status_replicas_available{job="kube-state-metrics", namespace=~".*"}
+            ) and (
+              changes(kube_deployment_status_replicas_updated{job="kube-state-metrics", namespace=~".*"}[10m])
+                ==
+              0
+            )
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeDeploymentReplicasMismatch }
+          annotations:
+            titulo: "Un despliegue quedó a medias"
+            que_pasa: "Una parte del sistema no tiene todas las copias que debería estar corriendo. Puede haber menos capacidad o errores."
+            que_hacer: "Revisarlo pronto, sobre todo si es producción."
+            summary: "Deployment has not matched the expected number of replicas."
+            description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has not matched the expected number of replicas for longer than 15 minutes on cluster {{ $labels.cluster }}."
+        # Origen: KubeDeploymentRolloutStuck (warning)
+        - alert: DespliegueIncompleto
+          expr: |
+            kube_deployment_status_condition{condition="Progressing", status="false",job="kube-state-metrics", namespace=~".*"}
+            != 0
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeDeploymentRolloutStuck }
+          annotations:
+            titulo: "Un despliegue se trabó"
+            que_pasa: "La actualización de una parte del sistema no avanza; puede estar corriendo la versión anterior."
+            que_hacer: "Pedir que revisen el último despliegue."
+            summary: "Deployment rollout is not progressing."
+            description: "Rollout of deployment {{ $labels.namespace }}/{{ $labels.deployment }} is not progressing for longer than 15 minutes on cluster {{ $labels.cluster }}."
+        # Origen: KubeStatefulSetReplicasMismatch (warning)
+        - alert: DespliegueIncompleto
+          expr: |
+            (
+              kube_statefulset_status_replicas_ready{job="kube-state-metrics", namespace=~".*"}
+                !=
+              kube_statefulset_replicas{job="kube-state-metrics", namespace=~".*"}
+            ) and (
+              changes(kube_statefulset_status_replicas_updated{job="kube-state-metrics", namespace=~".*"}[10m])
+                ==
+              0
+            )
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeStatefulSetReplicasMismatch }
+          annotations:
+            titulo: "Un despliegue quedó a medias"
+            que_pasa: "Una base de datos o servicio con datos (por ejemplo RabbitMQ o MongoDB) no tiene todas sus copias funcionando."
+            que_hacer: "Revisarlo pronto, sobre todo si es producción."
+            summary: "StatefulSet has not matched the expected number of replicas."
+            description: "StatefulSet {{ $labels.namespace }}/{{ $labels.statefulset }} has not matched the expected number of replicas for longer than 15 minutes on cluster {{ $labels.cluster }}."
+        # Origen: KubeContainerWaiting (warning)
+        - alert: ComponenteNoListo
+          expr: |
+            kube_pod_container_status_waiting_reason{reason!="CrashLoopBackOff", job="kube-state-metrics", namespace=~".*"} > 0
+          for: 1h
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeContainerWaiting }
+          annotations:
+            titulo: "Un componente no logra arrancar"
+            que_pasa: "Una parte del sistema lleva más de una hora esperando para arrancar (no baja su imagen o le falta configuración)."
+            que_hacer: "Pedir que lo revisen; no se arregla solo."
+            summary: "Pod container waiting longer than 1 hour"
+            description: "pod/{{ $labels.pod }} in namespace {{ $labels.namespace }} on container {{ $labels.container}} has been in waiting state for longer than 1 hour. (reason: \"{{ $labels.reason }}\") on cluster {{ $labels.cluster }}."
+        # Origen: KubeJobFailed (warning)
+        - alert: TareaProgramadaFallida
+          expr: |
+            kube_job_failed{job="kube-state-metrics", namespace=~".*"}  > 0
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeJobFailed }
+          annotations:
+            titulo: "Una tarea programada terminó con error"
+            que_pasa: "Una tarea que corre sola (respaldo, proceso nocturno, migración) terminó con error. El aviso sigue mientras la tarea fallida no se limpie, aunque las siguientes hayan salido bien."
+            que_hacer: "Pedir que revisen la tarea del detalle técnico; si las siguientes salieron bien, basta con borrar la fallida."
+            summary: "Job failed to complete."
+            description: "Job {{ $labels.namespace }}/{{ $labels.job_name }} failed to complete. Removing failed job after investigation should clear this alert on cluster {{ $labels.cluster }}."
+        # Origen: KubeCPUOvercommit (warning)
+        - alert: ServidorConCargaDeMas
+          expr: |
+            # Non-HA clusters.
+            (
+              (
+                sum by (cluster) (namespace_cpu:kube_pod_container_resource_requests:sum{})
+                -
+                sum by (cluster) (kube_node_status_allocatable{job="kube-state-metrics",resource="cpu"}) > 0
+              )
+              and
+              count by (cluster) (max by (cluster, node) (kube_node_role{job="kube-state-metrics", role="control-plane"})) < 3
+            )
+            or
+            # HA clusters.
+            (
+              sum by (cluster) (namespace_cpu:kube_pod_container_resource_requests:sum{})
+              -
+              (
+                # Skip clusters with only one allocatable node.
+                (
+                  sum by (cluster) (kube_node_status_allocatable{job="kube-state-metrics",resource="cpu"})
+                  -
+                  max by (cluster) (kube_node_status_allocatable{job="kube-state-metrics",resource="cpu"})
+                ) > 0
+              ) > 0
+            )
+          for: 10m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeCPUOvercommit }
+          annotations:
+            titulo: "El servidor tiene más procesador reservado del que tiene"
+            que_pasa: "Los programas del servidor tienen reservado más procesador del que existe. Hoy funciona, pero bajo carga todo se pone lento."
+            que_hacer: "Nada urgente; planear más capacidad o bajar reservas."
+            summary: "Cluster has overcommitted CPU resource requests."
+            description: "Cluster {{ $labels.cluster }} has overcommitted CPU resource requests for Pods by {{ printf \"%.2f\" $value }} CPU shares and cannot tolerate node failure."
+        # Origen: KubeMemoryOvercommit (warning)
+        - alert: ServidorConCargaDeMas
+          expr: |
+            # Non-HA clusters.
+            (
+              (
+                sum by (cluster) (namespace_memory:kube_pod_container_resource_requests:sum{})
+                -
+                sum by (cluster) (kube_node_status_allocatable{job="kube-state-metrics",resource="memory"}) > 0
+              )
+              and
+              count by (cluster) (max by (cluster, node) (kube_node_role{job="kube-state-metrics", role="control-plane"})) < 3
+            )
+            or
+            # HA clusters.
+            (
+              sum by (cluster) (namespace_memory:kube_pod_container_resource_requests:sum{})
+              -
+              (
+                # Skip clusters with only one allocatable node.
+                (
+                  sum by (cluster) (kube_node_status_allocatable{job="kube-state-metrics",resource="memory"})
+                  -
+                  max by (cluster) (kube_node_status_allocatable{job="kube-state-metrics",resource="memory"})
+                ) > 0
+              ) > 0
+            )
+          for: 10m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeMemoryOvercommit }
+          annotations:
+            titulo: "El servidor tiene más memoria reservada de la que tiene"
+            que_pasa: "Los programas del servidor tienen reservada más memoria de la que existe. Hoy funciona, pero si todos la usan a la vez algo se cae."
+            que_hacer: "Nada urgente; planear más capacidad o bajar reservas."
+            summary: "Cluster has overcommitted memory resource requests."
+            description: "Cluster {{ $labels.cluster }} has overcommitted memory resource requests for Pods by {{ $value | humanize }} bytes and cannot tolerate node failure."
+        # Origen: KubePersistentVolumeFillingUp (critical)
+        - alert: DiscoDeDatosLlenandose
+          expr: |
+            (
+              kubelet_volume_stats_available_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"}
+                /
+              kubelet_volume_stats_capacity_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"}
+            ) < 0.03
+            and
+            kubelet_volume_stats_used_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"} > 0
+            unless on (cluster, namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_access_mode{ access_mode="ReadOnlyMany"} == 1
+            unless on (cluster, namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_labels{label_excluded_from_alerts="true"} == 1
+          for: 1m
+          labels: { severity: critical, origen: ingenia365, regla_original: KubePersistentVolumeFillingUp }
+          annotations:
+            titulo: "Se está llenando un disco de datos"
+            que_pasa: "El disco de una base de datos o servicio se está quedando sin espacio. Cuando se llene, deja de guardar."
+            que_hacer: "Revisarlo hoy: ampliar el disco o liberar espacio."
+            summary: "PersistentVolume is filling up."
+            description: "The PersistentVolume claimed by {{ $labels.persistentvolumeclaim }} in Namespace {{ $labels.namespace }} {{ with $labels.cluster -}} on Cluster {{ . }} {{- end }} is only {{ $value | humanizePercentage }} free."
+        # Origen: KubePersistentVolumeFillingUp (warning)
+        - alert: DiscoDeDatosLlenandose
+          expr: |
+            (
+              kubelet_volume_stats_available_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"}
+                /
+              kubelet_volume_stats_capacity_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"}
+            ) < 0.15
+            and
+            kubelet_volume_stats_used_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"} > 0
+            and
+            predict_linear(kubelet_volume_stats_available_bytes{job="kubelet", namespace=~".*", metrics_path="/metrics"}[6h], 4 * 24 * 3600) < 0
+            unless on (cluster, namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_access_mode{ access_mode="ReadOnlyMany"} == 1
+            unless on (cluster, namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_labels{label_excluded_from_alerts="true"} == 1
+          for: 1h
+          labels: { severity: warning, origen: ingenia365, regla_original: KubePersistentVolumeFillingUp }
+          annotations:
+            titulo: "Se está llenando un disco de datos"
+            que_pasa: "El disco de una base de datos o servicio se está quedando sin espacio. Cuando se llene, deja de guardar."
+            que_hacer: "Revisarlo hoy: ampliar el disco o liberar espacio."
+            summary: "PersistentVolume is filling up."
+            description: "Based on recent sampling, the PersistentVolume claimed by {{ $labels.persistentvolumeclaim }} in Namespace {{ $labels.namespace }} {{ with $labels.cluster -}} on Cluster {{ . }} {{- end }} is expected to fill up within four days. Currently {{ $value | humanizePercentage }} is available."
+        # Origen: KubeNodeNotReady (warning)
+        - alert: ServidorNoDisponible
+          expr: |
+            kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0
+            and on (cluster, node)
+            kube_node_spec_unschedulable{job="kube-state-metrics"} == 0
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeNodeNotReady }
+          annotations:
+            titulo: "El servidor no está disponible"
+            que_pasa: "El servidor dejó de responder como debe; todo lo que corre en él puede estar caído."
+            que_hacer: "Revisarlo ya."
+            summary: "Node is not ready."
+            description: "{{ $labels.node }} has been unready for more than 15 minutes on cluster {{ $labels.cluster }}."
+        # Origen: KubeNodeUnreachable (warning)
+        - alert: ServidorNoDisponible
+          expr: |
+            (kube_node_spec_taint{job="kube-state-metrics",key="node.kubernetes.io/unreachable",effect="NoSchedule"} unless ignoring(key,value) kube_node_spec_taint{job="kube-state-metrics",key=~"ToBeDeletedByClusterAutoscaler|cloud.google.com/impending-node-termination|aws-node-termination-handler/spot-itn"}) == 1
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: KubeNodeUnreachable }
+          annotations:
+            titulo: "No se puede llegar al servidor"
+            que_pasa: "El servidor no se alcanza por la red; todo lo que corre en él puede estar caído."
+            que_hacer: "Revisarlo ya."
+            summary: "Node is unreachable."
+            description: "{{ $labels.node }} is unreachable and some workloads may be rescheduled on cluster {{ $labels.cluster }}."
+        # Origen: NodeFilesystemSpaceFillingUp (warning)
+        - alert: DiscoDelServidorLlenandose
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 15
+            and
+              predict_linear(node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""}[6h], 24*60*60) < 0
+            and
+              node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+            )
+          for: 1h
+          labels: { severity: warning, origen: ingenia365, regla_original: NodeFilesystemSpaceFillingUp }
+          annotations:
+            titulo: "El disco del servidor se va a llenar"
+            que_pasa: "Al ritmo actual, el disco del servidor se llena pronto. Cuando pase, la aplicación y las bases dejan de guardar."
+            que_hacer: "Revisarlo hoy: liberar espacio o ampliar el disco."
+            summary: "Filesystem is predicted to run out of space within the next 24 hours."
+            description: "Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf \"%.2f\" $value }}% available space left and is filling up."
+        # Origen: NodeFilesystemSpaceFillingUp (critical)
+        - alert: DiscoDelServidorLlenandose
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 10
+            and
+              predict_linear(node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""}[6h], 4*60*60) < 0
+            and
+              node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+            )
+          for: 1h
+          labels: { severity: critical, origen: ingenia365, regla_original: NodeFilesystemSpaceFillingUp }
+          annotations:
+            titulo: "El disco del servidor se va a llenar"
+            que_pasa: "Al ritmo actual, el disco del servidor se llena pronto. Cuando pase, la aplicación y las bases dejan de guardar."
+            que_hacer: "Revisarlo hoy: liberar espacio o ampliar el disco."
+            summary: "Filesystem is predicted to run out of space within the next 4 hours."
+            description: "Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf \"%.2f\" $value }}% available space left and is filling up fast."
+        # Origen: NodeFilesystemAlmostOutOfSpace (warning)
+        - alert: DiscoDelServidorLlenandose
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 5
+            and
+              node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+            )
+          for: 30m
+          labels: { severity: warning, origen: ingenia365, regla_original: NodeFilesystemAlmostOutOfSpace }
+          annotations:
+            titulo: "El disco del servidor está casi lleno"
+            que_pasa: "Al disco del servidor le queda muy poco espacio. Cuando se llene, la aplicación y las bases dejan de guardar."
+            que_hacer: "Revisarlo ya: liberar espacio o ampliar el disco."
+            summary: "Filesystem has less than 5% space left."
+            description: "Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf \"%.2f\" $value }}% available space left."
+        # Origen: NodeFilesystemAlmostOutOfSpace (critical)
+        - alert: DiscoDelServidorLlenandose
+          expr: |
+            (
+              node_filesystem_avail_bytes{job="node-exporter",fstype!="",mountpoint!=""} / node_filesystem_size_bytes{job="node-exporter",fstype!="",mountpoint!=""} * 100 < 3
+            and
+              node_filesystem_readonly{job="node-exporter",fstype!="",mountpoint!=""} == 0
+            )
+          for: 30m
+          labels: { severity: critical, origen: ingenia365, regla_original: NodeFilesystemAlmostOutOfSpace }
+          annotations:
+            titulo: "El disco del servidor está casi lleno"
+            que_pasa: "Al disco del servidor le queda muy poco espacio. Cuando se llene, la aplicación y las bases dejan de guardar."
+            que_hacer: "Revisarlo ya: liberar espacio o ampliar el disco."
+            summary: "Filesystem has less than 3% space left."
+            description: "Filesystem on {{ $labels.device }}, mounted on {{ $labels.mountpoint }}, at {{ $labels.instance }} has only {{ printf \"%.2f\" $value }}% available space left."
+        # Origen: NodeMemoryHighUtilization (warning)
+        - alert: ServidorSinMemoria
+          expr: |
+            100 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"} * 100) > 90
+          for: 15m
+          labels: { severity: warning, origen: ingenia365, regla_original: NodeMemoryHighUtilization }
+          annotations:
+            titulo: "Al servidor se le acaba la memoria"
+            que_pasa: "El servidor lleva 15 minutos usando más del 90 % de su memoria. Si sigue subiendo, el sistema empieza a cerrar programas."
+            que_hacer: "Revisarlo hoy."
+            summary: "Host is running out of memory."
+            description: "Memory is filling up at {{ $labels.instance }}, has been above 90% for the last 15 minutes, is currently at {{ printf \"%.2f\" $value }}%.
+"
+        # Origen: PrometheusRemoteStorageFailures (critical)
+        - alert: MonitoreoDeProduccionAtrasado
+          expr: |
+            (
+              (rate(prometheus_remote_storage_failed_samples_total{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m]) or rate(prometheus_remote_storage_samples_failed_total{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m]))
+            /
+              (
+                (rate(prometheus_remote_storage_failed_samples_total{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m]) or rate(prometheus_remote_storage_samples_failed_total{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m]))
+              +
+                (rate(prometheus_remote_storage_succeeded_samples_total{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m]) or rate(prometheus_remote_storage_samples_total{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m]))
+              )
+            )
+            * 100
+            > 1
+          for: 15m
+          labels: { severity: critical, origen: ingenia365, regla_original: PrometheusRemoteStorageFailures }
+          annotations:
+            titulo: "El monitoreo de producción no está llegando"
+            que_pasa: "Producción no le está mandando sus datos al monitoreo. El ERP puede estar bien, pero mientras dure no llegarían avisos de producción."
+            que_hacer: "Revisarlo hoy."
+            summary: "Prometheus fails to send samples to remote storage."
+            description: "Prometheus {{$labels.namespace}}/{{$labels.pod}} failed to send {{ printf \"%.1f\" $value }}% of the samples to {{ $labels.remote_name}}:{{ $labels.url }}"
+        # Origen: PrometheusRemoteWriteBehind (critical)
+        - alert: MonitoreoDeProduccionAtrasado
+          expr: |
+            # Without max_over_time, failed scrapes could create false negatives, see
+            # https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0 for details.
+            (
+              max_over_time(prometheus_remote_storage_queue_highest_timestamp_seconds{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m])
+            -
+              max_over_time(prometheus_remote_storage_queue_highest_sent_timestamp_seconds{job="monitoring-kube-prometheus-prometheus",namespace="monitoring"}[5m])
+            )
+            > 120
+          for: 15m
+          labels: { severity: critical, origen: ingenia365, regla_original: PrometheusRemoteWriteBehind }
+          annotations:
+            titulo: "El monitoreo de producción va atrasado"
+            que_pasa: "Los datos de producción llegan al monitoreo con retraso, así que los avisos de producción también llegarían tarde."
+            que_hacer: "Revisarlo hoy."
+            summary: "Prometheus remote write is behind."
+            description: "Prometheus {{$labels.namespace}}/{{$labels.pod}} remote write is {{ printf \"%.1f\" $value }}s behind for {{ $labels.remote_name}}:{{ $labels.url }}."

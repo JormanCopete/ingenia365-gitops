@@ -1,0 +1,28 @@
+# Argo aplica solo el catalogo de alertas (2026-11-13): editar
+# alertas-explicadas.yaml o alertas-backup.yaml en GitHub —tambien desde la pagina
+# web, con el lapiz— y en un minuto queda en el Prometheus de nonprod, con los
+# mismos textos en Telegram y en Grafana.
+#
+# Solo esos dos archivos: el resto de infrastructure/ se sigue aplicando a mano
+# (alertas-telegram.yaml no puede ir aqui porque el chat no esta en el repo).
+# Sin prune: borrar un archivo de la lista no borra las reglas del cluster.
+#
+# Se instala una vez a mano: kubectl apply -f infrastructure/nonprod/argocd-alertas.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoreo-alertas
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: infrastructure/nonprod
+    directory:
+      include: '{alertas-explicadas.yaml,alertas-backup.yaml}'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated: { prune: false, selfHeal: true }
