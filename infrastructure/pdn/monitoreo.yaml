@@ -179,6 +179,37 @@ data:
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
 
+      # La API del ERP (puerto "metrics", 9464): tiempo de cada peticion por ruta
+      # (microsoft_aspnetcore_hosting_http_server_request_duration), conexiones a
+      # la base y las colas de trabajo de fondo. Es lo que dice que pantalla es lenta
+      # (2026-11-24); hasta entonces solo existia en el registro del pod, que se
+      # pierde al reiniciarlo. Las de QUIC no se usan y se descartan.
+      - job_name: erp-api
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces: { names: [erp-pdn] }
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: erp-api
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            regex: "private_internaldiagnostics_.*|prometheus_net_.*"
+            action: drop
+
+      # RabbitMQ (plugin rabbitmq_prometheus, puerto 15692): profundidad de colas.
+      - job_name: erp-rabbitmq
+        static_configs:
+          - targets: ["erp-rabbitmq.erp-pdn.svc.cluster.local:15692"]
+            labels: { namespace: erp-pdn }
+
       - job_name: kube-state-metrics
         static_configs:
           - targets: ["kube-state-metrics.monitoring.svc.cluster.local:8080"]
@@ -202,6 +233,28 @@ data:
           min_backoff: 100ms
           max_backoff: 30s
 ---
+# La politica erp-solo-ingress-y-pares (del ERP) solo admite trafico desde
+# erp-pdn y kube-system; las politicas se suman, asi que esta abre SOLO los dos
+# puertos de metricas al agente de monitoreo, sin tocar las del ERP.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoreo-lee-metricas-del-erp
+  namespace: erp-pdn
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/part-of: ingenia365erp }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: monitoring }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: prometheus-agente }
+      ports:
+        - { port: 9464, protocol: TCP }
+        - { port: 15692, protocol: TCP }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -216,7 +269,7 @@ spec:
       labels: { app.kubernetes.io/name: prometheus-agente }
       annotations:
         # Fuerza el reinicio del pod cuando cambia la configuracion.
-        configuracion/version: "1"
+        configuracion/version: "2"
     spec:
       serviceAccountName: prometheus-agente
       # Sin esto el agente no puede resolver el destino: ver la nota de arriba.
