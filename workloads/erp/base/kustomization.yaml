@@ -25,6 +25,12 @@ configMapGenerator:
       - Database__Startup__RetryIntervalSeconds=5
       - PwnedPassword__Enabled=true
       - Serilog__MinimumLevel__Default=Information
+      # Cierre de sesion por inactividad (2026-11-25, pedido del dueno): 60
+      # minutos en vez de los 30 de appsettings.json. Es el general: rige para la
+      # consola del maestro y para toda cooperativa sin valor propio en su
+      # politica de identidad (ADM_TenantIdentityPolicies.SessionInactivityMinutes,
+      # de 15 a 120). La duracion maxima de la sesion (12 h) no cambia.
+      - Sesion__InactividadMinutos=60
       # Adjuntos en S3 (2026-09-22). Hasta ese dia los tres ambientes escribian
       # en el PVC erp-attachments: un disco local-path sin redundancia, fuera de
       # los respaldos diarios y ReadWriteOnce, o sea que con un segundo nodo una
