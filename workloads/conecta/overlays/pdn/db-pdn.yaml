@@ -1,0 +1,21 @@
+# PostgreSQL de producción: disco Retain y respaldo continuo con el plugin Barman Cloud, como erp-db.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: conecta-db
+spec:
+  storage:
+    size: 5Gi
+    storageClass: conecta-retain
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      enabled: true
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: conecta-pdn-store
+        # Nombre explícito en el catálogo: nunca coincide con el de erp-db.
+        serverName: conecta-db-pdn
+  postgresql:
+    parameters:
+      archive_timeout: "300s"     # RPO <= 5 min, igual que el ERP
+      wal_compression: "lz4"

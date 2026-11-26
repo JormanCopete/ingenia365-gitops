@@ -1,0 +1,47 @@
+# Respaldo continuo de la base de Conecta en producción: mismo bucket y credenciales que el ERP (s3-backup-creds, que
+# tools/k8s/bootstrap.sh copia al namespace), en su propio prefijo.
+# OJO: esto cubre la base. La custodia (Silo) necesita su propia réplica a un segundo sitio, pendiente (ADR-018).
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: conecta-pdn-store
+spec:
+  retentionPolicy: "35d"
+  configuration:
+    destinationPath: "s3://ingenia365-erp-backups/conecta/pg/pdn"
+    s3Credentials:
+      accessKeyId:     { name: s3-backup-creds, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: s3-backup-creds, key: ACCESS_SECRET_KEY }
+      region:          { name: s3-backup-creds, key: AWS_REGION }
+    wal:
+      compression: zstd
+      encryption: AES256
+      maxParallel: 4
+    data:
+      compression: gzip
+      encryption: AES256
+      jobs: 1
+      immediateCheckpoint: false
+    tags:
+      env: "pdn"
+      sistema: "conecta"
+      clasificacion: "confidencial"
+  instanceSidecarConfiguration:
+    retentionPolicyIntervalSeconds: 1800
+    resources:
+      requests: { cpu: "20m", memory: "64Mi" }
+      limits:   { memory: "256Mi" }
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: conecta-db-diario
+spec:
+  cluster: { name: conecta-db }
+  schedule: "0 45 6 * * *"        # 6 campos: 06:45 UTC = 01:45 en Colombia, después del respaldo del ERP
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+  backupOwnerReference: cluster
+  target: primary
+  immediate: true                 # uno al crear: valida la configuración

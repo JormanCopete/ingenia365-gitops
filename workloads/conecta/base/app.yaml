@@ -11,7 +11,10 @@ metadata:
   name: conecta-migrate
   annotations:
     argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    # HookSucceeded y NO BeforeHookCreation: con Argo CD 3.5.0, mientras el Job de la sincronización anterior
+    # existe, la operación termina "Succeeded" sin ejecutar el hook (ver migracion-job.yaml del ERP). Si falla,
+    # el Job queda para diagnosticarlo.
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
 spec:
   backoffLimit: 10
   ttlSecondsAfterFinished: 86400

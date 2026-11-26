@@ -1,0 +1,10 @@
+# Clase de almacenamiento local con reclaimPolicy Retain: si se borra un PVC de Conecta (por un prune de Argo o un
+# error), el directorio en el disco del nodo se conserva y se puede volver a enlazar. local-path, la clase por omisión,
+# lo BORRA. La usan la custodia (Silo), Vault y PostgreSQL de producción.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: conecta-retain
+provisioner: rancher.io/local-path
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer

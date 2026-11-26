@@ -17,7 +17,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: conecta-dev
   syncPolicy:
-    automated: { prune: true, selfHeal: true }
+    # APAGADO desde noviembre de 2026 para liberar memoria del nodo compartido (decisión del usuario, 2026-11-25):
+    # sin sincronización automática y sin cargas; los Secrets y los discos se conservan. Para encenderlo, volver a
+    # { prune: true, selfHeal: true } y sincronizar.
+    automated: null
     syncOptions: [CreateNamespace=false, ServerSideApply=true]
   # Ver erp-dev-qa.yaml: volumeClaimTemplates es inmutable y Kubernetes le agrega campos propios.
   ignoreDifferences:

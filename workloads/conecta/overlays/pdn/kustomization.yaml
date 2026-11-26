@@ -1,0 +1,72 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: conecta-pdn
+resources:
+  - ../../base
+  - almacenamiento.yaml
+  - respaldo.yaml
+# SIN el componente vault-unseal-nonprod: en producción el sello de Vault lo abre una persona con
+# tools/k8s/bootstrap.sh unseal (repo de Conecta). Tras un reinicio del nodo la firma queda detenida hasta entonces.
+configMapGenerator:
+  - name: conecta-env
+    literals:
+      - CONECTA_PUBLIC_URL=https://conecta.ingenia365.com
+      - ASPNETCORE_ENVIRONMENT=Production
+      # governance HASTA LA HABILITACIÓN: lo de prueba se puede limpiar con s3:BypassGovernanceRetention. Al emitir
+      # documentos reales se cambia a compliance (decisión del 2026-11-25).
+      - CUSTODY_LOCK_MODE=governance
+  - name: conecta-config
+    behavior: merge
+    literals:
+      # NIT de MUESTRA (decisión del 2026-11-25): el real de IngenIA365 SAS se pone antes de emitir documentos reales.
+      - Rendering__Manufacturer__Nit=800197268
+# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano con lo ya validado en QA. Estos son los digests
+# de develop 5a738c7, los que corren en conecta-qa. Revertir el commit vuelve a la versión anterior.
+images:
+  - name: ghcr.io/jormancopete/conecta-api
+    digest: sha256:e2804acd1d508bc636f19acc1e5d08c61659e1461a61b3be4b96c960ce8cae35
+  - name: ghcr.io/jormancopete/conecta-workers
+    digest: sha256:7d9038f3a17f06d7513333e08733a4b55b815d7de997386df4770fbbae85346a
+  - name: ghcr.io/jormancopete/conecta-dashboard
+    digest: sha256:c6d612b4bb21b422358629eaf0cb782bee349041f4fb32c570a52346a8c32583
+  - name: ghcr.io/jormancopete/conecta-migrator
+    digest: sha256:319764b030f3447d152dc11cd08f7894b8499ea7cb80c4182499733611565c65
+patches:
+  # Discos que sobreviven al borrado del PVC: la custodia y las claves no se pueden perder por un error de Argo.
+  - target: { kind: StatefulSet, name: conecta-silo }
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: conecta-retain
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 15Gi
+  - target: { kind: StatefulSet, name: conecta-vault }
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: conecta-retain
+  - target: { group: postgresql.cnpg.io, kind: Cluster, name: conecta-db }
+    path: db-pdn.yaml
+  # En PDN el mismo Traefik recibe app.ingenia365.com, cuyas rutas del ERP no llevan Host() y tienen prioridad 100 y 1.
+  # Las de Conecta van con Host() y prioridad mayor para que el ERP nunca las tape.
+  - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: conecta }
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`conecta.ingenia365.com`) && (PathPrefix(`/v1`) || PathPrefix(`/health`))
+      - op: replace
+        path: /spec/routes/0/priority
+        value: 300
+      - op: replace
+        path: /spec/routes/1/match
+        value: Host(`conecta.ingenia365.com`) && (PathPrefix(`/auth/realms`) || PathPrefix(`/auth/resources`))
+      - op: replace
+        path: /spec/routes/1/priority
+        value: 290
+      - op: replace
+        path: /spec/routes/2/match
+        value: Host(`conecta.ingenia365.com`) && PathPrefix(`/`)
+      - op: replace
+        path: /spec/routes/2/priority
+        value: 200

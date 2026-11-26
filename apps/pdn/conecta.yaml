@@ -1,0 +1,30 @@
+# Conecta (repo JormanCopete/Conecta365) en PRODUCCIÓN: sincronización MANUAL, igual que erp-pdn. Un merge no despliega
+# solo; alguien aprueba en Argo CD. El namespace y sus Secrets los crea antes tools/k8s/bootstrap.sh del repo de Conecta.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: conecta-pdn
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:JormanCopete/ingenia365-gitops.git
+    targetRevision: main
+    path: workloads/conecta/overlays/pdn
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: conecta-pdn
+  syncPolicy:
+    automated: null
+    syncOptions:
+      - CreateNamespace=false
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff: { duration: 30s, factor: 2, maxDuration: 5m }
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers: ["/spec/volumeClaimTemplates"]
