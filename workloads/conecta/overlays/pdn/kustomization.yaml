@@ -48,6 +48,13 @@ patches:
         value: conecta-retain
   - target: { group: postgresql.cnpg.io, kind: Cluster, name: conecta-db }
     path: db-pdn.yaml
+  # Migraciones ANTES de rotar los pods, como erp-db-migrate: si fallan, Argo aborta y los pods viejos siguen con el
+  # esquema viejo. En la primera sincronización no se podía (la base aún no existía); desde el 2026-11-26 ya existe.
+  - target: { kind: Job, name: conecta-migrate }
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/argocd.argoproj.io~1hook
+        value: PreSync
   # En PDN el mismo Traefik recibe app.ingenia365.com, cuyas rutas del ERP no llevan Host() y tienen prioridad 100 y 1.
   # Las de Conecta van con Host() y prioridad mayor para que el ERP nunca las tape.
   - target: { group: traefik.io, version: v1alpha1, kind: IngressRoute, name: conecta }
