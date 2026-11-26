@@ -92,15 +92,15 @@ configMapGenerator:
 # en Argo CD, y el digest en el commit es lo que se aprueba.
 images:
   - name: ghcr.io/jormancopete/ingenia365erp/api
-    digest: sha256:a448adc608ddbebe29f2c9efcd2160a20d180c1a65cc29c560f393c6a3977811
+    digest: sha256:ccdb855c360ba707de141be641408b224545c42c6ae7b34228df24c4c7f5caba
   - name: ghcr.io/jormancopete/ingenia365erp/web
-    digest: sha256:eca433cf1b850946b1d6a9073d57e3f1815594e3f4374654ca516b54ad7cdb8d
+    digest: sha256:fe1881272dab722ef5817864e4686fc7cb089719df4b9465c6887a8c705a0ac1
   - name: ghcr.io/jormancopete/ingenia365erp/migrator
-    digest: sha256:0bbca4c7e934861ace873bc572e383e435e8d8a15460d9dc804611ab0b42bd8b
+    digest: sha256:5ecd16d3511aa7c679f600aec13c90ba64ca02e96642775fc86b0bb4c00e9d77
   # Sidecar de credenciales (feature 011). Digest de partida el de develop; el CI
   # de release lo reemplaza como a los demas.
   - name: ghcr.io/jormancopete/ingenia365erp/credential-helper
-    digest: sha256:e1ebe89fb2d7390e8349c182e42e7c13fddba1885ead35fcd9b8087c455e8c04
+    digest: sha256:84c10e94156a81246dae293274eaab38c9f1a30f85a0ea898390e71a7a8e02aa
 patches:
   # Dos replicas de API y Web: un pod puede morir sin cortar el servicio.
   # (La Web no tiene circuitos Blazor Server, asi que no necesita afinidad.)
