@@ -305,7 +305,7 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "rootUrl": "http://localhost:5173",
+      "rootUrl": "${CONECTA_PUBLIC_URL}",
       "baseUrl": "/",
       "redirectUris": [
         "${CONECTA_PUBLIC_URL}/*"
