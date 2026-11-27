@@ -20,17 +20,17 @@ configMapGenerator:
     literals:
       # NIT real de IngenIA365 SAS (INNOVACIONES TECNOLOGICAS Y FINANCIERAS S.A.S., DV 4), según el RUT; 2026-11-26.
       - Rendering__Manufacturer__Nit=901691159
-# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano con lo ya validado en QA. Estos son los digests
-# de develop 5a738c7, los que corren en conecta-qa. Revertir el commit vuelve a la versión anterior.
+# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano. Estos son los de la versión v0.1.0
+# (workflow Release, firmadas con cosign y con SBOM; develop a8092ee). Revertir el commit vuelve a la anterior.
 images:
   - name: ghcr.io/jormancopete/conecta-api
-    digest: sha256:e2804acd1d508bc636f19acc1e5d08c61659e1461a61b3be4b96c960ce8cae35
+    digest: sha256:e0efc9e453ff54ef59e2ec1e42ad748cf02579595a05b5a5cc8b841b04801dc1
   - name: ghcr.io/jormancopete/conecta-workers
-    digest: sha256:7d9038f3a17f06d7513333e08733a4b55b815d7de997386df4770fbbae85346a
+    digest: sha256:6d01d068d68e6d599d2ca2ef185f20132c37b52f87a6a9c824c6dc838026b34c
   - name: ghcr.io/jormancopete/conecta-dashboard
-    digest: sha256:c6d612b4bb21b422358629eaf0cb782bee349041f4fb32c570a52346a8c32583
+    digest: sha256:e8726dca2078dba975b13d3489e779d2033a6881bfcc6e14f836dded67086405
   - name: ghcr.io/jormancopete/conecta-migrator
-    digest: sha256:319764b030f3447d152dc11cd08f7894b8499ea7cb80c4182499733611565c65
+    digest: sha256:eb4e2c2500dd09bc4b54942e9248c889b4b8a629491a3a615646483a770dfe1d
 patches:
   # Discos que sobreviven al borrado del PVC: la custodia y las claves no se pueden perder por un error de Argo.
   - target: { kind: StatefulSet, name: conecta-silo }
