@@ -26,17 +26,17 @@ configMapGenerator:
       - Email__Smtp__Port=587
       - Email__Smtp__Security=StartTls
       - Email__Smtp__From=noresponder.ingenia365erp@notifica365.com
-# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano. Estos son los de la versión v0.1.1
-# (workflow Release, firmadas con cosign y con SBOM; develop ae9a333). Revertir el commit vuelve a la anterior.
+# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano. Estos son los de la versión v0.1.2
+# (workflow Release, firmadas con cosign y con SBOM; develop e5b8ee2). Revertir el commit vuelve a la anterior.
 images:
   - name: ghcr.io/jormancopete/conecta-api
-    digest: sha256:3267e21ab00a4bc6ea166f2d307d23ffb3c2603c00370b36f719ddc125cedcc8
+    digest: sha256:a947518c8f31db0b674083f53e0058d799ad09c0a1dd90a5263ea76f2b3cb82c
   - name: ghcr.io/jormancopete/conecta-workers
-    digest: sha256:3ecb2d84da6db76e1ddb11d3870c432c06bf00541da4065d832502569d5318df
+    digest: sha256:449b79532a296117610ed0843b83b949f985a04970688f38ed8997a47b63ef4e
   - name: ghcr.io/jormancopete/conecta-dashboard
-    digest: sha256:9567948d35ce1eb34177443afdb37fa8dd2e6fec5ebb6b6e0f2e987f95c000d6
+    digest: sha256:237d66847711523cfc1880275b1d9a0490f716cc509cfa9c088d8b72aa0a46ec
   - name: ghcr.io/jormancopete/conecta-migrator
-    digest: sha256:f2d31047a6653ff2cba930ba88ecccc572b7b527ce90f01be1bc3a349bdbb235
+    digest: sha256:9b25a6c92b7602b2d3f08caf1d791175841f7a8385550b6c7fb128a44d9e9cab
 patches:
   # Discos que sobreviven al borrado del PVC: la custodia y las claves no se pueden perder por un error de Argo.
   - target: { kind: StatefulSet, name: conecta-silo }
