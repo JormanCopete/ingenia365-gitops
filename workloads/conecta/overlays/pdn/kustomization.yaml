@@ -18,8 +18,8 @@ configMapGenerator:
   - name: conecta-config
     behavior: merge
     literals:
-      # NIT de MUESTRA (decisión del 2026-11-25): el real de IngenIA365 SAS se pone antes de emitir documentos reales.
-      - Rendering__Manufacturer__Nit=800197268
+      # NIT real de IngenIA365 SAS (INNOVACIONES TECNOLOGICAS Y FINANCIERAS S.A.S., DV 4), según el RUT; 2026-11-26.
+      - Rendering__Manufacturer__Nit=901691159
 # Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano con lo ya validado en QA. Estos son los digests
 # de develop 5a738c7, los que corren en conecta-qa. Revertir el commit vuelve a la versión anterior.
 images:
