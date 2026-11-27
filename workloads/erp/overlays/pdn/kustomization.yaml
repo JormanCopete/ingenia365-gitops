@@ -19,12 +19,20 @@ components:
   # bandeja de integracion. Requiere el Secret erp-rabbitmq en erp-pdn (instalado el
   # 2026-11-12 con crear-secreto-rabbitmq.ps1; ver la cabecera del componente).
   - ../../components/mensajeria
+  # Feature 028 del ERP: credenciales de facturacion electronica (Secret
+  # erp-fe-credenciales, opcional) para el canal IngenIA Conecta.
+  - ../../components/facturacion-electronica
 # PRODUCCION: no se auto-migra (fail-fast si hay pendientes) y no lleva datos
 # demo. El esquema lo aplica el Job PreSync antes de rotar los pods.
 configMapGenerator:
   - name: erp-config
     behavior: merge
     literals:
+      # Feature 028: extremos de IngenIA Conecta (la vigencia guarda la clave, nunca
+      # la URL). CONECTA-PRUEBAS = tenant en habilitacion en Conecta PDN; CONECTA =
+      # validez legal. ConectaAceptaNumeroDelErp queda apagado hasta el pedido D1.
+      - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__Endpoints__PDN=https://conecta.ingenia365.com
+      - ElectronicInvoicing__Channels__CONECTA__Endpoints__PDN=https://conecta.ingenia365.com
       - ASPNETCORE_ENVIRONMENT=Production
       - Database__AutoMigrate=false
       - Database__Seed__RunParametricSeed=true

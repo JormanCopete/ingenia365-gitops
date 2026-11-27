@@ -1,0 +1,24 @@
+# Credenciales de facturacion electronica del ERP (feature 012, contrato dian.md
+# seccion 11; feature 028, canal IngenIA Conecta).
+#
+# Monta el Secret erp-fe-credenciales como DIRECTORIO (sin subPath) en
+# /secrets/facturacion-electronica/ del contenedor de la API, solo lectura. Una
+# clave por cooperativa y canal: {tenantPublicId}.{canal}.json, p. ej.
+# {...}.CONECTA-PRUEBAS.json con clientId y clientSecret. Sin subPath el kubelet
+# refresca el archivo solo y la API lo relee al vencer su cache de 5 minutos: no
+# hay que reiniciar para agregar una cooperativa o rotar un secreto.
+#
+# optional: true -> sin el Secret la API arranca igual (el canal SIMULADO no
+# necesita credencial y CONECTA* responde "falta la credencial").
+#
+# El Secret NO vive en GitOps: lo crea tools/scripts/crear-secreto-facturacion-
+# electronica.ps1 del ERP (kubectl patch de UNA clave; en pdn pide PRODUCCION).
+# Las URL de Conecta van como literales del ConfigMap en cada overlay
+# (ElectronicInvoicing__Channels__CONECTA_PRUEBAS__Endpoints__<clave>); el canal
+# CONECTA (validez legal) solo en pdn. Receta del ERP:
+# docs/operaciones/conecta-puesta-en-marcha.md.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - path: api.yaml
+    target: { kind: Deployment, name: erp-api }

@@ -16,12 +16,19 @@ components:
   # bandeja de integracion. Requiere el Secret erp-rabbitmq en erp-qa (instalado el
   # 2026-11-12 con crear-secreto-rabbitmq.ps1; ver la cabecera del componente).
   - ../../components/mensajeria
+  # Feature 028 del ERP: credenciales de facturacion electronica (Secret
+  # erp-fe-credenciales, opcional) para el canal IngenIA Conecta.
+  - ../../components/facturacion-electronica
 # QA: se auto-migra (para probar que las migraciones aplican limpio) y lleva
 # datos demo para certificacion funcional. Es el ensayo general de produccion.
 configMapGenerator:
   - name: erp-config
     behavior: merge
     literals:
+      # Feature 028: extremo de IngenIA Conecta QA para el modo de pruebas (la
+      # vigencia guarda la clave QA, nunca la URL). El canal CONECTA no existe aqui.
+      # ConectaAceptaNumeroDelErp queda apagado hasta el pedido D1.
+      - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__Endpoints__QA=https://conecta-qa.ingenia365.com
       - ASPNETCORE_ENVIRONMENT=QA
       - Database__AutoMigrate=true
       - Database__Seed__RunParametricSeed=true

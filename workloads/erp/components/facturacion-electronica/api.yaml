@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: erp-api
+spec:
+  template:
+    spec:
+      volumes:
+        - name: fe-credenciales
+          secret:
+            secretName: erp-fe-credenciales
+            optional: true
+            defaultMode: 0440
+      containers:
+        - name: api
+          volumeMounts:
+            - name: fe-credenciales
+              mountPath: /secrets/facturacion-electronica
+              readOnly: true
