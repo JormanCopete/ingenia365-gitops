@@ -20,6 +20,12 @@ configMapGenerator:
     literals:
       # NIT real de IngenIA365 SAS (INNOVACIONES TECNOLOGICAS Y FINANCIERAS S.A.S., DV 4), según el RUT; 2026-11-26.
       - Rendering__Manufacturer__Nit=901691159
+      # Correo al adquirente: por ahora la misma cuenta del ERP (decisión del 2026-11-27), hasta tener una propia.
+      # mail.notifica365.com presenta un certificado válido de Let's Encrypt (verificado el 2026-11-27): StartTls normal.
+      - Email__Smtp__Host=mail.notifica365.com
+      - Email__Smtp__Port=587
+      - Email__Smtp__Security=StartTls
+      - Email__Smtp__From=noresponder.ingenia365erp@notifica365.com
 # Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano. Estos son los de la versión v0.1.1
 # (workflow Release, firmadas con cosign y con SBOM; develop ae9a333). Revertir el commit vuelve a la anterior.
 images:

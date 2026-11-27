@@ -95,6 +95,12 @@ spec:
               valueFrom: { secretKeyRef: { name: conecta-silo-app, key: username } }
             - name: Minio__SecretKey
               valueFrom: { secretKeyRef: { name: conecta-silo-app, key: password } }
+            # Correo al adquirente (numeral 9.1). Usuario y contraseña del SMTP en el Secret conecta-smtp; servidor y
+            # remitente en conecta-config del overlay. Sin Email__Smtp__Host, Production no arranca (DevelopmentFallbacks).
+            - name: Email__Smtp__User
+              valueFrom: { secretKeyRef: { name: conecta-smtp, key: username, optional: true } }
+            - name: Email__Smtp__Password
+              valueFrom: { secretKeyRef: { name: conecta-smtp, key: password, optional: true } }
           ports:
             - { name: http, containerPort: 8080 }
           startupProbe:
@@ -173,6 +179,12 @@ spec:
               valueFrom: { secretKeyRef: { name: conecta-silo-app, key: username } }
             - name: Minio__SecretKey
               valueFrom: { secretKeyRef: { name: conecta-silo-app, key: password } }
+            # Correo al adquirente (numeral 9.1). Usuario y contraseña del SMTP en el Secret conecta-smtp; servidor y
+            # remitente en conecta-config del overlay. Sin Email__Smtp__Host, Production no arranca (DevelopmentFallbacks).
+            - name: Email__Smtp__User
+              valueFrom: { secretKeyRef: { name: conecta-smtp, key: username, optional: true } }
+            - name: Email__Smtp__Password
+              valueFrom: { secretKeyRef: { name: conecta-smtp, key: password, optional: true } }
           resources:
             requests: { cpu: 50m, memory: 160Mi }
             limits:   { memory: 384Mi }
