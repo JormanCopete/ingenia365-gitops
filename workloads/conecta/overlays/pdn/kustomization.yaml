@@ -30,13 +30,13 @@ configMapGenerator:
 # (workflow Release, firmadas con cosign y con SBOM; develop a4403ae). Revertir el commit vuelve a la anterior.
 images:
   - name: ghcr.io/jormancopete/conecta-api
-    digest: sha256:e4bed3d2f25fb261ca97617fe1e6a42c2f9b5456fbb70a02c33a1021644a412e
+    digest: sha256:1f55e9b40adc7c3dac25440d66e304b986052f563a17a1f015eb7be27929f0d4
   - name: ghcr.io/jormancopete/conecta-workers
-    digest: sha256:1cd8dfe68c2cc1350c18440c5154147086569a015a1a4a21d02fce00410b42c4
+    digest: sha256:ce0015a92cdec62875fd58a3ea002fbc220996c979bd3ea1ac15e3a2498b1191
   - name: ghcr.io/jormancopete/conecta-dashboard
-    digest: sha256:6d24381b843af046a012ae40018e23bde2f47b6189ec465361590c8bc4e0b27c
+    digest: sha256:108cfeecd177ddddb9b82761f0d9d57cf32c0260ba7256269840edeece41dcee
   - name: ghcr.io/jormancopete/conecta-migrator
-    digest: sha256:20e171907dabd8893ceafd1a3c81c87e84b20348702c957a2c8c1f09f53e120b
+    digest: sha256:10c25ba2deb105da6f3f2ff59886dbdb40a23b453bfabb68aa1a016a0f50c79f
 patches:
   # Discos que sobreviven al borrado del PVC: la custodia y las claves no se pueden perder por un error de Argo.
   - target: { kind: StatefulSet, name: conecta-silo }
