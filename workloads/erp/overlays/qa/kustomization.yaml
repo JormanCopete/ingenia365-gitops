@@ -27,8 +27,12 @@ configMapGenerator:
     literals:
       # Feature 028: extremo de IngenIA Conecta QA para el modo de pruebas (la
       # vigencia guarda la clave QA, nunca la URL). El canal CONECTA no existe aqui.
-      # ConectaAceptaNumeroDelErp queda apagado hasta el pedido D1.
+      # Prueba T052 (2026-11-28): la cooperativa de prueba de QA emite por el
+      # tenant de COOFLOPAL en habilitacion de Conecta PDN (servicio PDN), para no
+      # cambiar de canal a COOFLOPAL en produccion. La compuerta D1 va encendida.
       - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__Endpoints__QA=https://conecta-qa.ingenia365.com
+      - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__Endpoints__PDN=https://conecta.ingenia365.com
+      - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__ConectaAceptaNumeroDelErp=true
       - ASPNETCORE_ENVIRONMENT=QA
       - Database__AutoMigrate=true
       - Database__Seed__RunParametricSeed=true
