@@ -26,8 +26,8 @@ configMapGenerator:
       - Email__Smtp__Port=587
       - Email__Smtp__Security=StartTls
       - Email__Smtp__From=noresponder.ingenia365erp@notifica365.com
-# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano. Estos son los de la versión v0.1.3
-# (workflow Release, firmadas con cosign y con SBOM; develop a4403ae). Revertir el commit vuelve a la anterior.
+# Imágenes por DIGEST. Producción NO las recibe del CI: se fijan a mano. Estos son los de la versión v0.1.4
+# (workflow Release, firmadas con cosign y con SBOM; develop d27b4aa). Revertir el commit vuelve a la anterior.
 images:
   - name: ghcr.io/jormancopete/conecta-api
     digest: sha256:1f55e9b40adc7c3dac25440d66e304b986052f563a17a1f015eb7be27929f0d4
