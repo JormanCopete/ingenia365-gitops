@@ -30,8 +30,11 @@ configMapGenerator:
     literals:
       # Feature 028: extremos de IngenIA Conecta (la vigencia guarda la clave, nunca
       # la URL). CONECTA-PRUEBAS = tenant en habilitacion en Conecta PDN; CONECTA =
-      # validez legal. ConectaAceptaNumeroDelErp queda apagado hasta el pedido D1.
+      # validez legal. Conecta PDN acepta el numero del ERP desde la v0.1.4
+      # (2026-11-28, pedido D1): se enciende solo para CONECTA-PRUEBAS. CONECTA
+      # (real) sigue apagado hasta probar de punta a punta en habilitacion.
       - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__Endpoints__PDN=https://conecta.ingenia365.com
+      - ElectronicInvoicing__Channels__CONECTA_PRUEBAS__ConectaAceptaNumeroDelErp=true
       - ElectronicInvoicing__Channels__CONECTA__Endpoints__PDN=https://conecta.ingenia365.com
       - ASPNETCORE_ENVIRONMENT=Production
       - Database__AutoMigrate=false
